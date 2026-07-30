@@ -30,8 +30,8 @@ if (process.env.NODE_ENV === "production" && storeBackend === "json") {
 // 카탈로그
 export const listPartners = () => impl.listPartners();
 export const getPartner = (code: string) => impl.getPartner(code);
-export const listProducts = () => impl.listProducts();
-export const getProduct = (id: string) => impl.getProduct(id);
+export const listCategories = () => impl.listCategories();
+export const getCategory = (code: string) => impl.getCategory(code);
 
 // 접수
 export const createApplication = (input: NewApplicationInput) =>
@@ -49,6 +49,8 @@ export const updateStatus = (
 export const setAdminNote = (id: string, note: string) => impl.setAdminNote(id, note);
 export const setNotifyOptIn = (ticket: string, optIn: boolean) =>
   impl.setNotifyOptIn(ticket, optIn);
+export const setFinalPremium = (id: string, amount: number | null) =>
+  impl.setFinalPremium(id, amount);
 
 // 대기열
 export const pollQueue = (ticket: string) => impl.pollQueue(ticket);

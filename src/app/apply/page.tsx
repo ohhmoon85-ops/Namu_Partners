@@ -1,12 +1,6 @@
 import type { Metadata } from "next";
 import ApplyWizard from "@/components/apply/ApplyWizard";
-import {
-  getPartner,
-  getProduct,
-  getSettings,
-  listPartners,
-  listProducts,
-} from "@/lib/store";
+import { getPartner, getSettings, listCategories, listPartners } from "@/lib/store";
 import Link from "next/link";
 
 export const metadata: Metadata = {
@@ -20,18 +14,17 @@ export const dynamic = "force-dynamic";
 export default async function ApplyPage({
   searchParams,
 }: {
-  searchParams: Promise<{ code?: string; product?: string }>;
+  searchParams: Promise<{ code?: string }>;
 }) {
   const params = await searchParams;
-  const [settings, partners, products] = await Promise.all([
+  const [settings, partners, categories] = await Promise.all([
     getSettings(),
     listPartners(),
-    listProducts(),
+    listCategories(),
   ]);
 
   // 기획서 5.2 — 단체 코드 자동 인식 (초대 링크 / QR 파라미터)
   const partner = params.code ? await getPartner(params.code) : null;
-  const product = params.product ? await getProduct(params.product) : null;
 
   if (settings.intakePaused) {
     return (
@@ -53,9 +46,8 @@ export default async function ApplyPage({
   return (
     <ApplyWizard
       partners={partners}
-      products={products}
+      categories={categories}
       initialPartnerCode={partner?.code ?? ""}
-      initialProductId={product?.id ?? ""}
     />
   );
 }

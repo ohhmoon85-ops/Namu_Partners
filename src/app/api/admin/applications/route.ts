@@ -2,7 +2,12 @@ import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
 import { decrypt } from "@/lib/crypto";
 import { maskBirth, maskName, maskPhone } from "@/lib/format";
-import { listApplications, setAdminNote, updateStatus } from "@/lib/store";
+import {
+  listApplications,
+  setAdminNote,
+  setFinalPremium,
+  updateStatus,
+} from "@/lib/store";
 import { notifyApplicant } from "@/lib/notify";
 import { APPLICATION_STATUSES, type ApplicationStatus } from "@/lib/types";
 
@@ -34,9 +39,13 @@ export async function GET(request: Request) {
       status: app.status,
       partnerCode: app.partnerCode,
       partnerName: app.partnerName,
+      categoryName: app.categoryName,
+      insurer: app.insurer,
       productName: app.productName,
-      groupPremium: app.groupPremium,
-      designerPremium: app.designerPremium,
+      quotedPremium: app.quotedPremium,
+      estimatedPremium: app.estimatedPremium,
+      finalPremium: app.finalPremium,
+      memo: app.memo,
       name: maskName(decrypt(app.nameEnc)),
       phone: maskPhone(decrypt(app.phoneEnc)),
       birth: maskBirth(decrypt(app.birthEnc)),
@@ -72,6 +81,22 @@ export async function PATCH(request: Request) {
 
   if (typeof body.adminNote === "string") {
     const updated = await setAdminNote(id, body.adminNote.slice(0, 1000));
+    if (!updated) {
+      return NextResponse.json(
+        { ok: false, error: "접수 건을 찾을 수 없습니다." },
+        { status: 404 }
+      );
+    }
+  }
+
+  // 확정 보험료 — 캐시백 정산의 유일한 근거이므로 관리자만 입력할 수 있다.
+  if (body.finalPremium !== undefined) {
+    const raw = Number(body.finalPremium);
+    const amount =
+      body.finalPremium === null || !Number.isFinite(raw) || raw <= 0
+        ? null
+        : Math.min(Math.round(raw), 100_000_000);
+    const updated = await setFinalPremium(id, amount);
     if (!updated) {
       return NextResponse.json(
         { ok: false, error: "접수 건을 찾을 수 없습니다." },

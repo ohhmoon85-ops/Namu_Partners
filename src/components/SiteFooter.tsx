@@ -22,12 +22,13 @@ export default function SiteFooter() {
             </p>
           </div>
 
+          {/* 협약단체 안내(/partners)는 의도적으로 넣지 않는다 — SiteHeader 주석 참고 */}
           <nav aria-label="바로가기">
             <p className="text-sm font-bold text-navy-900">바로가기</p>
             <ul className="mt-3 space-y-2.5 text-sm text-muted">
               <li><Link href="/apply" className="hover:text-navy">보험 가입 신청</Link></li>
               <li><Link href="/status" className="hover:text-navy">접수 조회</Link></li>
-              <li><Link href="/partners" className="hover:text-navy">협약단체 안내</Link></li>
+              <li><Link href="/#calculator" className="hover:text-navy">절감액 계산</Link></li>
               <li><Link href="/faq" className="hover:text-navy">자주 묻는 질문</Link></li>
             </ul>
           </nav>

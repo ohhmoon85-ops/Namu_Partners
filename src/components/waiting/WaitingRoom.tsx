@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { number, waitTimeText, won } from "@/lib/format";
-import type { Product } from "@/lib/types";
+import { number, percent, waitTimeText } from "@/lib/format";
+import { SAVING_RATE } from "@/lib/catalog";
 
 interface Snapshot {
   ticket: string;
@@ -17,19 +17,19 @@ interface Snapshot {
   totalWaiting: number;
   notifyOptIn: boolean;
   partnerName: string;
-  productName: string;
+  /** 신청 요약 (상품명 또는 보험 종류) */
+  requestLabel: string;
 }
 
 const POLL_INTERVAL_MS = 3000;
 
-export default function WaitingRoom({
-  initial,
-  products,
-}: {
-  initial: Snapshot;
-  /** 대기 중 콘텐츠에 쓰는 상품 목록 — 서버에서 저장소를 읽어 전달한다 */
-  products: Product[];
-}) {
+/**
+ * 가상 대기실 (기획서 4.3)
+ *
+ * ⚠️ 협약단체 캐시백은 이 화면에 노출하지 않는다. 대기 중 콘텐츠는
+ *    절감 구조와 진행 안내로만 구성한다.
+ */
+export default function WaitingRoom({ initial }: { initial: Snapshot }) {
   const [snapshot, setSnapshot] = useState<Snapshot>(initial);
   const [offline, setOffline] = useState(false);
   const [savingOptIn, setSavingOptIn] = useState(false);
@@ -210,7 +210,7 @@ export default function WaitingRoom({
       </div>
 
       {/* 대기 중 콘텐츠 — 대기시간을 홍보 접점으로 전환 (기획서 4.3) */}
-      <WaitingContent products={products} />
+      <WaitingContent />
     </div>
   );
 }
@@ -253,8 +253,8 @@ function ServedView({ snapshot }: { snapshot: Snapshot }) {
           <dd className="font-semibold text-navy-900">{snapshot.partnerName}</dd>
         </div>
         <div className="flex items-center justify-between gap-4">
-          <dt className="text-muted">신청 상품</dt>
-          <dd className="font-semibold text-navy-900">{snapshot.productName}</dd>
+          <dt className="text-muted">신청 내용</dt>
+          <dd className="font-semibold text-navy-900">{snapshot.requestLabel}</dd>
         </div>
       </dl>
 
@@ -299,11 +299,7 @@ const WAIT_FAQ = [
   },
 ];
 
-function WaitingContent({ products }: { products: Product[] }) {
-  // 추천 상품이 지정돼 있지 않으면 앞의 두 건을 보여준다.
-  const featured = products.filter((p) => p.featured);
-  const highlights = featured.length > 0 ? featured : products.slice(0, 2);
-
+function WaitingContent() {
   return (
     <div className="container-np mt-14 max-w-2xl">
       <p className="text-[13px] font-semibold uppercase tracking-[0.16em] text-white/40">
@@ -311,50 +307,34 @@ function WaitingContent({ products }: { products: Product[] }) {
       </p>
 
       <div className="mt-5 space-y-4">
-        {/* 절감 사례 */}
+        {/* 절감 원리 요약 */}
         <div className="glass">
-          <p className="text-[15px] font-bold">이만큼 아끼셨습니다</p>
-          <ul className="mt-4 space-y-3">
-            {highlights.map((product) => {
-              const saving = product.designerPremium - product.groupPremium;
-              return (
-                <li
-                  key={product.id}
-                  className="flex items-center justify-between gap-3 rounded-xl bg-white/[0.06] px-4 py-3"
-                >
-                  <span className="min-w-0">
-                    <span className="block truncate text-[13px] font-semibold">
-                      {product.name}
-                    </span>
-                    <span className="block text-[11px] text-white/50">
-                      설계사 {won(product.designerPremium)} → 단체 {won(product.groupPremium)}
-                    </span>
-                  </span>
-                  <span className="shrink-0 text-right">
-                    <span className="block text-[15px] font-extrabold text-gold-400">
-                      연 {won(saving * 12)}
-                    </span>
-                    <span className="block text-[11px] text-white/50">절감</span>
-                  </span>
-                </li>
-              );
-            })}
+          <p className="text-[15px] font-bold">보험료가 낮아지는 이유</p>
+          <p className="mt-2 text-[13px] leading-relaxed text-white/65">
+            보장을 줄여서가 아닙니다. 상품도, 보험사도, 약관도 그대로입니다.
+            개별 가입 시 발생하던 모집·관리 비용을 단체 단위로 묶어 덜어내기
+            때문에 평균 {percent(SAVING_RATE * 100)}가 낮아집니다.
+          </p>
+          <ul className="mt-4 space-y-2 text-[13px] text-white/70">
+            <li className="flex gap-2.5"><span className="text-gold-400">✓</span> 보장 내용·약관 동일</li>
+            <li className="flex gap-2.5"><span className="text-gold-400">✓</span> 보험사도 그대로</li>
+            <li className="flex gap-2.5"><span className="text-gold-400">✓</span> 추가로 내시는 비용 없음</li>
           </ul>
         </div>
 
-        {/* 캐시백 안내 */}
+        {/* 상담 준비 안내 */}
         <div className="glass">
-          <p className="text-[15px] font-bold">우리 단체에도 돌아갑니다</p>
-          <p className="mt-2 text-[13px] leading-relaxed text-white/65">
-            회원님이 납입하시는 보험료의 3%는 소속 단체에 캐시백으로
-            지급됩니다. 회원 복지와 단체 재정확보가 함께 이뤄지는 구조입니다.
+          <p className="text-[15px] font-bold">상담 전에 준비하시면 좋은 것</p>
+          <ul className="mt-3 space-y-2.5 text-[13px] leading-relaxed text-white/65">
+            <li>· 알아보신 보험사와 상품명 (있으시면)</li>
+            <li>· 안내받으신 월 보험료와 보장 내용</li>
+            <li>· 현재 가입 중인 보험이 있다면 그 내용</li>
+            <li>· 연락받기 편한 시간대</li>
+          </ul>
+          <p className="mt-4 text-[12px] leading-relaxed text-white/45">
+            기존 계약을 해지하고 새 계약을 체결하면 인수가 거절되거나 보험료가
+            인상될 수 있습니다. 상담에서 꼭 비교해 보세요.
           </p>
-          <Link
-            href="/partners"
-            className="mt-4 inline-flex text-[13px] font-semibold text-gold-400 underline"
-          >
-            캐시백 구조 자세히 보기
-          </Link>
         </div>
 
         {/* FAQ */}

@@ -1,9 +1,8 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
-import type { Partner, Product } from "@/lib/types";
+import type { InsuranceCategory, Partner } from "@/lib/types";
 import { formatBirth, formatPhone, percent, won } from "@/lib/format";
 import {
   collectErrors,
@@ -12,32 +11,37 @@ import {
   validatePhone,
   type FieldErrors,
 } from "@/lib/validation";
-import { CASHBACK_RATE, savingRate } from "@/lib/catalog";
+import { SAVING_RATE, estimatePremium } from "@/lib/catalog";
 
-const STEPS = ["소속 단체", "상품 선택", "정보 입력", "동의·접수"] as const;
+const STEPS = ["소속 단체", "원하는 보험", "정보 입력", "동의·접수"] as const;
 
 interface Props {
   partners: Partner[];
-  products: Product[];
+  categories: InsuranceCategory[];
   /** 링크 파라미터로 미리 지정된 값 (기획서 5.2 단체 코드 자동 인식) */
   initialPartnerCode: string;
-  initialProductId: string;
 }
 
 export default function ApplyWizard({
   partners,
-  products,
+  categories,
   initialPartnerCode,
-  initialProductId,
 }: Props) {
   const router = useRouter();
 
   // 링크로 단체가 지정돼 들어온 경우 1단계를 건너뛴다.
-  const [step, setStep] = useState(initialPartnerCode ? (initialProductId ? 2 : 1) : 0);
+  const [step, setStep] = useState(initialPartnerCode ? 1 : 0);
   const [partnerCode, setPartnerCode] = useState(initialPartnerCode);
   const [codeInput, setCodeInput] = useState("");
   const [codeError, setCodeError] = useState("");
-  const [productId, setProductId] = useState(initialProductId);
+
+  const [request, setRequest] = useState({
+    categoryCode: "",
+    insurer: "",
+    productName: "",
+    quotedPremium: "",
+    memo: "",
+  });
 
   const [form, setForm] = useState({
     name: "",
@@ -58,10 +62,15 @@ export default function ApplyWizard({
     () => partners.find((p) => p.code === partnerCode),
     [partners, partnerCode]
   );
-  const product = useMemo(
-    () => products.find((p) => p.id === productId),
-    [products, productId]
+  const category = useMemo(
+    () => categories.find((c) => c.code === request.categoryCode),
+    [categories, request.categoryCode]
   );
+
+  const quotedNumber = useMemo(() => {
+    const digits = request.quotedPremium.replace(/\D/g, "");
+    return digits ? Number(digits) : 0;
+  }, [request.quotedPremium]);
 
   function applyCode() {
     const code = codeInput.trim().toUpperCase();
@@ -96,7 +105,7 @@ export default function ApplyWizard({
       return;
     }
     if (step === 1) {
-      if (!productId) return;
+      if (!request.categoryCode) return;
       setStep(2);
       return;
     }
@@ -111,7 +120,7 @@ export default function ApplyWizard({
       setSubmitError("개인정보 수집·이용에 동의해 주셔야 접수가 가능합니다.");
       return;
     }
-    if (!partnerCode || !productId || !validateInfoStep()) {
+    if (!partnerCode || !request.categoryCode || !validateInfoStep()) {
       setSubmitError("입력 내용을 다시 확인해 주세요.");
       setStep(2);
       return;
@@ -125,7 +134,11 @@ export default function ApplyWizard({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           partnerCode,
-          productId,
+          categoryCode: request.categoryCode,
+          insurer: request.insurer,
+          productName: request.productName,
+          quotedPremium: quotedNumber || null,
+          memo: request.memo,
           name: form.name.trim(),
           phone: form.phone,
           birth: form.birth,
@@ -153,7 +166,7 @@ export default function ApplyWizard({
 
   const canProceed =
     (step === 0 && !!partnerCode) ||
-    (step === 1 && !!productId) ||
+    (step === 1 && !!request.categoryCode) ||
     step === 2 ||
     (step === 3 && agree.privacy);
 
@@ -178,22 +191,23 @@ export default function ApplyWizard({
         )}
 
         {step === 1 && (
-          <StepProduct
-            products={products}
-            productId={productId}
-            onSelect={setProductId}
+          <StepRequest
+            categories={categories}
+            request={request}
+            setRequest={setRequest}
+            quotedNumber={quotedNumber}
             partnerName={partner?.name ?? ""}
           />
         )}
 
-        {step === 2 && (
-          <StepInfo form={form} setForm={setForm} errors={errors} />
-        )}
+        {step === 2 && <StepInfo form={form} setForm={setForm} errors={errors} />}
 
         {step === 3 && (
           <StepConfirm
             partner={partner}
-            product={product}
+            category={category}
+            request={request}
+            quotedNumber={quotedNumber}
             form={form}
             agree={agree}
             setAgree={setAgree}
@@ -274,9 +288,7 @@ function StepIndicator({ current }: { current: number }) {
                 </span>
                 {i < STEPS.length - 1 && (
                   <span
-                    className={`mx-1 h-px flex-1 ${
-                      i < current ? "bg-navy" : "bg-line"
-                    }`}
+                    className={`mx-1 h-px flex-1 ${i < current ? "bg-navy" : "bg-line"}`}
                   />
                 )}
               </div>
@@ -316,7 +328,7 @@ function StepPartner({
         어느 단체를 통해 가입하시나요?
       </h1>
       <p className="mt-2 text-[14px] leading-relaxed text-muted">
-        선택하신 단체로 캐시백이 귀속됩니다. 소속 단체를 정확히 선택해 주세요.
+        협약단체 회원 확인을 위해 소속 단체를 선택해 주세요.
       </p>
 
       <ul className="mt-6 space-y-2.5">
@@ -342,7 +354,8 @@ function StepPartner({
                     {partner.name}
                   </span>
                   <span className="block text-[12px] text-muted">
-                    {partner.category} · 회원 {partner.memberCount.toLocaleString("ko-KR")}명
+                    {partner.category} · 회원{" "}
+                    {partner.memberCount.toLocaleString("ko-KR")}명
                   </span>
                 </span>
                 <span
@@ -350,9 +363,7 @@ function StepPartner({
                     selected ? "border-navy bg-navy" : "border-line"
                   }`}
                 >
-                  {selected && (
-                    <span className="h-1.5 w-1.5 rounded-full bg-white" />
-                  )}
+                  {selected && <span className="h-1.5 w-1.5 rounded-full bg-white" />}
                 </span>
               </button>
             </li>
@@ -386,30 +397,39 @@ function StepPartner({
           </p>
         )}
         <p className="mt-4 text-[12px] leading-relaxed text-muted">
-          아직 협약을 맺지 않은 단체라면{" "}
-          <Link href="/partners" className="font-semibold text-navy underline">
-            협약 문의
-          </Link>
-          를 통해 담당자께 안내해 주세요.
+          소속 단체가 아직 협약을 맺지 않았다면 단체 담당자께 문의해 주세요.
         </p>
       </div>
     </section>
   );
 }
 
-/* ─────────────────────── 2단계 · 상품 선택 ─────────────────────── */
+/* ─────────────────────── 2단계 · 원하는 보험 ─────────────────────── */
 
-function StepProduct({
-  products,
-  productId,
-  onSelect,
+interface RequestForm {
+  categoryCode: string;
+  insurer: string;
+  productName: string;
+  quotedPremium: string;
+  memo: string;
+}
+
+function StepRequest({
+  categories,
+  request,
+  setRequest,
+  quotedNumber,
   partnerName,
 }: {
-  products: Product[];
-  productId: string;
-  onSelect: (id: string) => void;
+  categories: InsuranceCategory[];
+  request: RequestForm;
+  setRequest: React.Dispatch<React.SetStateAction<RequestForm>>;
+  quotedNumber: number;
   partnerName: string;
 }) {
+  const estimated = quotedNumber > 0 ? estimatePremium(quotedNumber) : 0;
+  const saving = quotedNumber - estimated;
+
   return (
     <section>
       <h1 className="text-[22px] font-extrabold tracking-tight text-navy-900">
@@ -418,67 +438,153 @@ function StepProduct({
       <p className="mt-2 text-[14px] leading-relaxed text-muted">
         {partnerName && (
           <>
-            <strong className="font-semibold text-navy">{partnerName}</strong> 회원 전용
-            보험료입니다.{" "}
+            <strong className="font-semibold text-navy">{partnerName}</strong> 회원
+            자격으로 신청하십니다.{" "}
           </>
         )}
-        설계사 경유 보험료와 비교해 보세요.
+        이미 알아보신 상품이 있다면 그대로 적어 주세요.
       </p>
 
-      <ul className="mt-6 space-y-3">
-        {products.map((product) => {
-          const selected = product.id === productId;
-          const saving = product.designerPremium - product.groupPremium;
-          return (
-            <li key={product.id}>
-              <button
-                type="button"
-                onClick={() => onSelect(product.id)}
-                aria-pressed={selected}
-                className={`w-full rounded-2xl border p-5 text-left transition-all ${
-                  selected
-                    ? "border-navy bg-navy-50"
-                    : "border-line bg-white hover:border-navy-300"
-                }`}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-[16px] font-bold text-navy-900">
-                      {product.name}
-                    </p>
-                    <p className="mt-1 text-[13px] leading-relaxed text-muted">
-                      {product.summary}
-                    </p>
-                  </div>
-                  <span className="chip shrink-0 bg-navy text-white">
-                    {percent(savingRate(product))} ↓
+      {/* 보험 종류 (필수) */}
+      <fieldset className="mt-7">
+        <legend className="label">보험 종류 <span className="text-red-500">*</span></legend>
+        <ul className="grid gap-2 sm:grid-cols-2">
+          {categories.map((category) => {
+            const selected = category.code === request.categoryCode;
+            return (
+              <li key={category.code}>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setRequest((r) => ({ ...r, categoryCode: category.code }))
+                  }
+                  aria-pressed={selected}
+                  className={`h-full w-full rounded-xl border p-4 text-left transition-all ${
+                    selected
+                      ? "border-navy bg-navy-50"
+                      : "border-line bg-white hover:border-navy-300"
+                  }`}
+                >
+                  <span className="block text-[14px] font-bold text-navy-900">
+                    {category.name}
                   </span>
-                </div>
+                  <span className="mt-1 block text-[12px] leading-relaxed text-muted">
+                    {category.examples}
+                  </span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      </fieldset>
 
-                <div className="mt-4 flex items-end justify-between gap-3 border-t border-line/80 pt-4">
-                  <div>
-                    <p className="text-[11px] text-muted">설계사 경유</p>
-                    <p className="text-[14px] text-muted line-through">
-                      {won(product.designerPremium)}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-[11px] font-semibold text-gold">단체 전용가</p>
-                    <p className="text-[22px] font-extrabold leading-tight text-navy-900">
-                      {won(product.groupPremium)}
-                      <span className="text-[12px] font-semibold text-muted"> /월</span>
-                    </p>
-                  </div>
-                </div>
+      {/* 상품 정보 (선택) */}
+      <div className="card mt-7">
+        <p className="text-[14px] font-bold text-navy-900">
+          알아보신 상품이 있으신가요? <span className="text-muted">(선택)</span>
+        </p>
+        <p className="mt-1.5 text-[12px] leading-relaxed text-muted">
+          적어 주시면 같은 상품으로 가입 가능한지 먼저 확인해 드립니다.
+          모르셔도 괜찮습니다 &mdash; 상담에서 함께 찾아드립니다.
+        </p>
 
-                <p className="mt-3 rounded-lg bg-gold-50 px-3 py-2 text-center text-[12px] font-semibold text-navy-900">
-                  연 {won(saving * 12)} 절감 · 보장 동일
-                </p>
-              </button>
-            </li>
-          );
-        })}
-      </ul>
+        <div className="mt-5 grid gap-4 sm:grid-cols-2">
+          <div>
+            <label className="label" htmlFor="insurer">보험사</label>
+            <input
+              id="insurer"
+              value={request.insurer}
+              onChange={(e) => setRequest((r) => ({ ...r, insurer: e.target.value }))}
+              placeholder="예: ○○생명, ○○화재"
+              className="field"
+              maxLength={40}
+            />
+          </div>
+          <div>
+            <label className="label" htmlFor="productName">상품명</label>
+            <input
+              id="productName"
+              value={request.productName}
+              onChange={(e) =>
+                setRequest((r) => ({ ...r, productName: e.target.value }))
+              }
+              placeholder="예: 무배당 ○○종합보험"
+              className="field"
+              maxLength={80}
+            />
+          </div>
+        </div>
+
+        <div className="mt-4">
+          <label className="label" htmlFor="quotedPremium">
+            안내받은 월 보험료
+          </label>
+          <div className="relative">
+            <input
+              id="quotedPremium"
+              value={
+                request.quotedPremium
+                  ? Number(
+                      request.quotedPremium.replace(/\D/g, "")
+                    ).toLocaleString("ko-KR")
+                  : ""
+              }
+              onChange={(e) =>
+                setRequest((r) => ({ ...r, quotedPremium: e.target.value }))
+              }
+              placeholder="예: 85,000"
+              inputMode="numeric"
+              className="field pr-12"
+            />
+            <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-[14px] font-semibold text-muted">
+              원
+            </span>
+          </div>
+
+          {quotedNumber > 0 && (
+            <div className="mt-3 rounded-xl border border-gold/30 bg-gold-50 p-4">
+              <div className="flex items-end justify-between gap-3">
+                <div>
+                  <p className="text-[11px] text-muted">안내받으신 보험료</p>
+                  <p className="text-[14px] text-muted line-through">
+                    {won(quotedNumber)}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-[11px] font-semibold text-gold">
+                    예상 보험료 ({percent(SAVING_RATE * 100)} 절감)
+                  </p>
+                  <p className="text-[22px] font-extrabold leading-tight text-navy-900">
+                    {won(estimated)}
+                  </p>
+                </div>
+              </div>
+              <p className="mt-3 text-center text-[12px] font-semibold text-navy-900">
+                연 {won(saving * 12)} 절감 예상
+              </p>
+            </div>
+          )}
+        </div>
+
+        <div className="mt-4">
+          <label className="label" htmlFor="memo">요청사항</label>
+          <textarea
+            id="memo"
+            value={request.memo}
+            onChange={(e) => setRequest((r) => ({ ...r, memo: e.target.value }))}
+            rows={3}
+            maxLength={500}
+            placeholder="원하시는 보장 범위, 상담 가능 시간 등을 적어 주세요."
+            className="field resize-none"
+          />
+        </div>
+      </div>
+
+      <p className="mt-5 text-[12px] leading-relaxed text-muted">
+        * 예상 보험료는 평균 절감률을 적용한 참고용 추정치입니다. 보험사·상품·연령·
+        직업·가입 담보 및 인수 심사 결과에 따라 실제 보험료는 달라지며, 최종 금액은
+        상담 단계에서 안내해 드립니다. 상품에 따라 단체 가입이 제한될 수 있습니다.
+      </p>
     </section>
   );
 }
@@ -616,14 +722,18 @@ function StepInfo({
 
 function StepConfirm({
   partner,
-  product,
+  category,
+  request,
+  quotedNumber,
   form,
   agree,
   setAgree,
   submitError,
 }: {
   partner?: Partner;
-  product?: Product;
+  category?: InsuranceCategory;
+  request: RequestForm;
+  quotedNumber: number;
   form: InfoForm;
   agree: { privacy: boolean; notify: boolean; marketing: boolean };
   setAgree: React.Dispatch<
@@ -631,7 +741,7 @@ function StepConfirm({
   >;
   submitError: string;
 }) {
-  const saving = product ? product.designerPremium - product.groupPremium : 0;
+  const estimated = quotedNumber > 0 ? estimatePremium(quotedNumber) : 0;
 
   return (
     <section>
@@ -641,31 +751,35 @@ function StepConfirm({
 
       <dl className="card mt-6 space-y-3 text-[14px]">
         <Row label="소속 단체" value={partner?.name ?? "-"} />
-        <Row label="선택 상품" value={product?.name ?? "-"} />
-        <Row label="이름" value={form.name} />
-        <Row label="휴대폰" value={form.phone} />
-        <Row label="생년월일" value={form.birth} />
-        {product && (
+        <Row label="보험 종류" value={category?.name ?? "-"} />
+        {request.insurer && <Row label="희망 보험사" value={request.insurer} />}
+        {request.productName && <Row label="상품명" value={request.productName} />}
+
+        {quotedNumber > 0 && (
           <>
             <div className="border-t border-line pt-3" />
             <Row
-              label="설계사 경유 보험료"
-              value={<span className="text-muted line-through">{won(product.designerPremium)}</span>}
+              label="안내받은 보험료"
+              value={<span className="text-muted line-through">{won(quotedNumber)}</span>}
             />
             <Row
-              label="단체 전용 보험료"
+              label="예상 보험료"
               value={
                 <span className="text-[17px] font-extrabold text-navy-900">
-                  {won(product.groupPremium)} /월
+                  {won(estimated)} /월
                 </span>
               }
             />
             <p className="rounded-lg bg-gold-50 px-3 py-2 text-center text-[13px] font-semibold text-navy-900">
-              연 {won(saving * 12)} 절감 · {partner?.name}에{" "}
-              {won(product.groupPremium * 12 * CASHBACK_RATE)} 캐시백
+              연 {won((quotedNumber - estimated) * 12)} 절감 예상
             </p>
           </>
         )}
+
+        <div className="border-t border-line pt-3" />
+        <Row label="이름" value={form.name} />
+        <Row label="휴대폰" value={form.phone} />
+        <Row label="생년월일" value={form.birth} />
       </dl>
 
       <div className="mt-6 space-y-2.5">
@@ -676,8 +790,8 @@ function StepConfirm({
           title="개인정보 수집·이용 동의 (필수)"
         >
           <ul className="space-y-1">
-            <li>· 수집 항목: 이름, 휴대폰 번호, 생년월일, 성별(선택), 소속 단체, 신청 상품</li>
-            <li>· 이용 목적: 단체보험 가입 상담 및 접수 처리, 진행상태 안내</li>
+            <li>· 수집 항목: 이름, 휴대폰 번호, 생년월일, 성별(선택), 소속 단체, 가입 희망 보험 정보</li>
+            <li>· 이용 목적: 보험 가입 상담 접수 및 처리, 진행상태 안내</li>
             <li>· 보유 기간: 접수일로부터 3년 (관계 법령에 따른 보존 의무가 있는 경우 해당 기간)</li>
             <li>· 동의를 거부하실 수 있으나, 거부 시 가입 상담 접수가 불가합니다.</li>
           </ul>
@@ -711,8 +825,8 @@ function StepConfirm({
 
       <p className="mt-5 text-[12px] leading-relaxed text-muted">
         본 신청은 가입 상담 접수이며 보험계약의 청약이 아닙니다. 최종 청약은
-        관련 법령에 따른 유자격 모집조직을 통해 진행되며, 상담 과정에서 보장
-        내용과 최종 보험료를 안내해 드립니다.
+        관련 법령에 따른 유자격 모집조직을 통해 진행되며, 상담 과정에서 가입
+        가능 여부와 최종 보험료를 안내해 드립니다.
       </p>
     </section>
   );
@@ -755,7 +869,10 @@ function ConsentBox({
           onChange={(e) => onChange(e.target.checked)}
           className="mt-0.5 h-5 w-5 shrink-0 accent-[#1F3864]"
         />
-        <label htmlFor={title} className="flex-1 cursor-pointer text-[14px] font-semibold text-navy-900">
+        <label
+          htmlFor={title}
+          className="flex-1 cursor-pointer text-[14px] font-semibold text-navy-900"
+        >
           {title}
           {required && <span className="ml-1 text-red-500">*</span>}
         </label>

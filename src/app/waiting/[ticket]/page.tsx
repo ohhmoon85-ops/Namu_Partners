@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import WaitingRoom from "@/components/waiting/WaitingRoom";
-import { listProducts, pollQueue } from "@/lib/store";
+import { pollQueue } from "@/lib/store";
 import { notifyServed } from "@/lib/notify";
 
 export const metadata: Metadata = {
@@ -44,6 +44,5 @@ export default async function WaitingPage({
     );
   }
 
-  const products = await listProducts();
-  return <WaitingRoom initial={snapshot} products={products} />;
+  return <WaitingRoom initial={snapshot} />;
 }

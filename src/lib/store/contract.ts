@@ -1,11 +1,11 @@
 import type {
   Application,
   ApplicationStatus,
+  InsuranceCategory,
   NotificationLog,
   Partner,
   PartnerInquiry,
   PartnerSummary,
-  Product,
   PublicStats,
   Settings,
 } from "@/lib/types";
@@ -22,7 +22,16 @@ import type {
 
 export interface NewApplicationInput {
   partnerCode: string;
-  productId: string;
+  /** 보험 종류 코드 */
+  categoryCode: string;
+  /** 희망 보험사 (선택) */
+  insurer: string;
+  /** 고객이 입력한 상품명 (선택) */
+  productName: string;
+  /** 설계사·비교사이트에서 안내받은 월 보험료 (선택) */
+  quotedPremium: number | null;
+  /** 상담 요청사항 (선택) */
+  memo: string;
   /** 이미 암호화된 값이 들어온다 (평문을 저장소에 넘기지 않는다) */
   nameEnc: string;
   phoneEnc: string;
@@ -56,7 +65,8 @@ export interface QueueSnapshot {
   totalWaiting: number;
   notifyOptIn: boolean;
   partnerName: string;
-  productName: string;
+  /** 대기실에 표시할 신청 상품 요약 (예: "실손의료비 (실비)" 또는 상품명) */
+  requestLabel: string;
 }
 
 export interface QueuePollResult {
@@ -76,8 +86,8 @@ export interface StoreApi {
   // 카탈로그 -----------------------------------------------------------
   listPartners(): Promise<Partner[]>;
   getPartner(code: string): Promise<Partner | null>;
-  listProducts(): Promise<Product[]>;
-  getProduct(id: string): Promise<Product | null>;
+  listCategories(): Promise<InsuranceCategory[]>;
+  getCategory(code: string): Promise<InsuranceCategory | null>;
 
   // 접수 ---------------------------------------------------------------
   createApplication(input: NewApplicationInput): Promise<Application>;
@@ -92,6 +102,8 @@ export interface StoreApi {
   ): Promise<Application | null>;
   setAdminNote(id: string, note: string): Promise<Application | null>;
   setNotifyOptIn(ticket: string, optIn: boolean): Promise<Application | null>;
+  /** 청약 완료 시 담당자가 확정 보험료를 입력한다 — 캐시백 정산 기준 */
+  setFinalPremium(id: string, amount: number | null): Promise<Application | null>;
 
   // 대기열 -------------------------------------------------------------
   pollQueue(ticket: string): Promise<QueuePollResult>;

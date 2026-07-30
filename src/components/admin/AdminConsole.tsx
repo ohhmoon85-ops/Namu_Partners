@@ -20,9 +20,13 @@ interface AdminApplication {
   status: ApplicationStatus;
   partnerCode: string;
   partnerName: string;
+  categoryName: string;
+  insurer: string;
   productName: string;
-  groupPremium: number;
-  designerPremium: number;
+  quotedPremium: number | null;
+  estimatedPremium: number | null;
+  finalPremium: number | null;
+  memo: string;
   name: string;
   phone: string;
   birth: string;
@@ -372,6 +376,9 @@ function ApplicationRow({
   onChanged: () => void;
 }) {
   const [note, setNote] = useState(app.adminNote);
+  const [premium, setPremium] = useState(
+    app.finalPremium !== null ? String(app.finalPremium) : ""
+  );
   const [revealed, setRevealed] = useState<{
     name: string;
     phone: string;
@@ -412,7 +419,11 @@ function ApplicationRow({
         </span>
         <StatusBadge status={app.status} />
         <span className="text-[13px] text-muted">{app.partnerName}</span>
-        <span className="text-[13px] text-muted">{app.productName}</span>
+        <span className="text-[13px] text-muted">
+          {app.productName
+            ? `${app.insurer} ${app.productName}`.trim()
+            : app.categoryName}
+        </span>
         <span className="ml-auto text-[12px] text-muted">
           {formatDateTime(app.createdAt)}
         </span>
@@ -431,10 +442,27 @@ function ApplicationRow({
               />
               <Row label="대기번호" value={number(app.queueNumber)} />
               <Row label="알림 수신" value={app.notifyOptIn ? "동의" : "미동의"} />
+              <Row label="보험 종류" value={app.categoryName} />
+              <Row label="희망 보험사" value={app.insurer || "-"} />
+              <Row label="상품명" value={app.productName || "-"} />
               <Row
-                label="보험료"
-                value={`${won(app.groupPremium)} /월 (설계사 ${won(app.designerPremium)})`}
+                label="안내받은 보험료"
+                value={app.quotedPremium !== null ? `${won(app.quotedPremium)} /월` : "미입력"}
               />
+              <Row
+                label="예상 보험료"
+                value={
+                  app.estimatedPremium !== null ? `${won(app.estimatedPremium)} /월` : "-"
+                }
+              />
+              {app.memo && (
+                <div className="pt-1">
+                  <dt className="text-muted">요청사항</dt>
+                  <dd className="mt-1 whitespace-pre-wrap rounded-lg bg-mist p-3 text-[12px] leading-relaxed text-navy-900">
+                    {app.memo}
+                  </dd>
+                </div>
+              )}
             </dl>
 
             <div>
@@ -478,6 +506,40 @@ function ApplicationRow({
                   {STATUS_LABEL[status]}
                 </button>
               ))}
+            </div>
+          </div>
+
+          <div className="mt-5 rounded-xl border border-gold/40 bg-gold-50 p-4">
+            <label
+              className="text-[12px] font-bold text-navy-900"
+              htmlFor={`premium-${app.id}`}
+            >
+              확정 월 보험료 (청약 완료 시 입력)
+            </label>
+            <p className="mt-1 text-[11px] leading-relaxed text-muted">
+              캐시백 정산의 유일한 근거입니다. 비워 두면 예상 보험료로 임시 집계됩니다.
+            </p>
+            <div className="mt-2 flex gap-2">
+              <input
+                id={`premium-${app.id}`}
+                value={
+                  premium ? Number(premium.replace(/\D/g, "")).toLocaleString("ko-KR") : ""
+                }
+                onChange={(e) => setPremium(e.target.value.replace(/\D/g, ""))}
+                inputMode="numeric"
+                placeholder="예: 72,000"
+                className="field flex-1 !py-2.5 !text-[13px]"
+              />
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() =>
+                  patch({ finalPremium: premium ? Number(premium) : null })
+                }
+                className="btn-ghost !min-h-[42px] !px-4 !text-[13px]"
+              >
+                저장
+              </button>
             </div>
           </div>
 

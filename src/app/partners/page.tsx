@@ -2,15 +2,27 @@ import type { Metadata } from "next";
 import Reveal from "@/components/Reveal";
 import CashbackSimulator from "@/components/partners/CashbackSimulator";
 import PartnerInquiryForm from "@/components/partners/PartnerInquiryForm";
-import { listPartners, listProducts } from "@/lib/store";
+import { listPartners } from "@/lib/store";
 
-// 협약단체 목록과 상품 요율을 저장소에서 읽으므로 요청 시 렌더링한다.
+// 협약단체 목록을 저장소에서 읽으므로 요청 시 렌더링한다.
 export const dynamic = "force-dynamic";
 
+/**
+ * 협약단체(B2B) 안내 — 단체 담당자 전용 페이지
+ *
+ * ⚠️ 이 페이지에만 캐시백(3%) 내용이 존재한다.
+ *    가입자(회원)가 알게 해서는 안 되므로:
+ *      · 헤더·푸터 메뉴에 링크하지 않는다 (SiteHeader/SiteFooter 주석 참고)
+ *      · robots.txt 와 메타로 검색엔진 색인을 차단한다
+ *      · 링크 미리보기에 캐시백 문구가 뜨지 않도록 description 을 중립적으로 둔다
+ *    단체 담당자에게 URL 을 직접 전달하는 방식으로 운영한다.
+ *    URL 을 아는 사람은 열람할 수 있으므로, 완전한 차단이 필요하면
+ *    접근 코드 방식으로 전환해야 한다.
+ */
 export const metadata: Metadata = {
-  title: "협약단체 안내",
-  description:
-    "회원에게는 절감을, 단체에는 재정을. 회원이 가입한 보험료의 3%를 단체에 캐시백으로 지급하는 협약 프로그램입니다.",
+  title: "협약 프로그램 안내",
+  description: "단체 담당자를 위한 협약 프로그램 안내 페이지입니다.",
+  robots: { index: false, follow: false, nocache: true },
 };
 
 const PROCESS = [
@@ -47,12 +59,9 @@ const PROCESS = [
 ];
 
 export default async function PartnersPage() {
-  const [partners, products] = await Promise.all([listPartners(), listProducts()]);
-  const averagePremium = products.length
-    ? Math.round(
-        products.reduce((sum, p) => sum + p.groupPremium, 0) / products.length
-      )
-    : 0;
+  const partners = await listPartners();
+  // 시뮬레이터 기본값 — 실제 접수 데이터가 쌓이면 평균 보험료로 교체할 것.
+  const averagePremium = 90_000;
 
   return (
     <>

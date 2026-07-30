@@ -3,18 +3,22 @@ import "./globals.css";
 import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
 
+/**
+ * ⚠️ 메타데이터는 검색 결과·카카오톡 링크 미리보기에 그대로 노출된다.
+ *    협약단체 캐시백 관련 표현을 절대 넣지 말 것.
+ */
 export const metadata: Metadata = {
   title: {
     default: "나무파트너스 | 같은 보험, 더 가벼운 보험료",
     template: "%s | 나무파트너스",
   },
   description:
-    "설계사 가입 대비 평균 17.5% 절감. 단체의 힘으로 누리는 합리적인 보험 — 협약단체에는 회원 보험료의 3%를 캐시백으로 돌려드립니다.",
-  keywords: ["단체보험", "협약단체", "보험료 절감", "캐시백", "나무파트너스"],
+    "이미 알아보신 그 상품 그대로, 설계사 가입 대비 평균 17.5% 절감. 단체의 힘으로 누리는 합리적인 보험 — 나무파트너스.",
+  keywords: ["단체보험", "보험료 절감", "보험 비교", "단체 가입", "나무파트너스"],
   openGraph: {
     title: "같은 보험, 더 가벼운 보험료 — 나무파트너스",
     description:
-      "설계사 가입 대비 평균 17.5% 절감 · 협약단체 3% 캐시백. 단체보험 프로모션 플랫폼.",
+      "이미 알아보신 상품 그대로, 설계사 가입 대비 평균 17.5% 절감. 국내 보험사 전 상품 취급.",
     type: "website",
     locale: "ko_KR",
     siteName: "나무파트너스",

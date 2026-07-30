@@ -17,9 +17,12 @@ interface Result {
   queueNumber: number;
   status: ApplicationStatus;
   partnerName: string;
+  categoryName: string;
+  insurer: string;
   productName: string;
-  groupPremium: number;
-  designerPremium: number;
+  quotedPremium: number | null;
+  estimatedPremium: number | null;
+  finalPremium: number | null;
   applicantName: string;
   notifyOptIn: boolean;
   createdAt: string;
@@ -160,14 +163,31 @@ function ResultView({ result }: { result: Result }) {
         <dl className="mt-6 space-y-3 border-t border-line pt-5 text-[14px]">
           <Row label="신청자" value={result.applicantName} />
           <Row label="소속 단체" value={result.partnerName} />
-          <Row label="신청 상품" value={result.productName} />
-          <Row label="단체 전용 보험료" value={`${won(result.groupPremium)} /월`} />
-          <Row
-            label="설계사 대비 절감"
-            value={`연 ${won((result.designerPremium - result.groupPremium) * 12)}`}
-          />
+          <Row label="보험 종류" value={result.categoryName} />
+          {result.insurer && <Row label="희망 보험사" value={result.insurer} />}
+          {result.productName && <Row label="상품명" value={result.productName} />}
+          {result.quotedPremium !== null && (
+            <Row
+              label="안내받은 보험료"
+              value={<span className="text-muted line-through">{won(result.quotedPremium)}</span>}
+            />
+          )}
+          {result.finalPremium !== null ? (
+            <Row label="확정 보험료" value={`${won(result.finalPremium)} /월`} />
+          ) : (
+            result.estimatedPremium !== null && (
+              <Row label="예상 보험료" value={`${won(result.estimatedPremium)} /월`} />
+            )
+          )}
           <Row label="접수일시" value={formatDateTime(result.createdAt)} />
         </dl>
+
+        {result.finalPremium === null && result.estimatedPremium !== null && (
+          <p className="mt-4 text-[12px] leading-relaxed text-muted">
+            * 예상 보험료는 평균 절감률을 적용한 참고용 추정치입니다. 최종
+            보험료는 상담·인수 심사 후 확정됩니다.
+          </p>
+        )}
       </div>
 
       {/* 단계별 진행상태 타임라인 — 기획서 4.3 */}

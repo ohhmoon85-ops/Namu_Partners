@@ -6,8 +6,8 @@ import {
   IntakePausedError,
   InvalidCatalogError,
   createApplication,
+  getCategory,
   getPartner,
-  getProduct,
 } from "@/lib/store";
 import {
   collectErrors,
@@ -48,7 +48,10 @@ export async function POST(request: Request) {
   }
 
   const partnerCode = String(body.partnerCode ?? "");
-  const productId = String(body.productId ?? "");
+  const categoryCode = String(body.categoryCode ?? "");
+  const insurer = String(body.insurer ?? "").trim().slice(0, 40);
+  const productName = String(body.productName ?? "").trim().slice(0, 80);
+  const memo = String(body.memo ?? "").trim().slice(0, 500);
   const name = String(body.name ?? "").trim();
   const phone = String(body.phone ?? "");
   const birth = String(body.birth ?? "");
@@ -72,13 +75,20 @@ export async function POST(request: Request) {
     );
   }
 
-  const product = await getProduct(productId);
-  if (!product) {
+  const category = await getCategory(categoryCode);
+  if (!category) {
     return NextResponse.json(
-      { ok: false, error: "유효하지 않은 상품입니다." },
+      { ok: false, error: "보험 종류를 선택해 주세요." },
       { status: 400 }
     );
   }
+
+  // 고객이 시장에서 안내받은 보험료 — 선택 입력이며 검증된 값이 아니다.
+  const quotedRaw = Number(body.quotedPremium);
+  const quotedPremium =
+    Number.isFinite(quotedRaw) && quotedRaw > 0
+      ? Math.min(Math.round(quotedRaw), 100_000_000)
+      : null;
 
   // 클라이언트 검증을 신뢰하지 않고 서버에서 재검증한다.
   const fields = collectErrors({
@@ -100,7 +110,11 @@ export async function POST(request: Request) {
     // (사전 조회 후 삽입하면 동시 요청에서 경합이 발생한다)
     const application = await createApplication({
       partnerCode: partner.code,
-      productId: product.id,
+      categoryCode: category.code,
+      insurer,
+      productName,
+      quotedPremium,
+      memo,
       // 개인정보는 암호화하여 저장한다. (기획서 6장 보안)
       nameEnc: encrypt(name),
       phoneEnc: encrypt(phoneDigits),

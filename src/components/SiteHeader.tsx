@@ -4,10 +4,15 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
+/**
+ * 대외 메뉴.
+ * ⚠️ 협약단체 안내(/partners)는 캐시백 구조를 담고 있어 가입자 대상 메뉴에
+ *    노출하지 않는다. 단체 담당자에게 URL 을 직접 전달하는 방식으로 운영한다.
+ */
 const NAV = [
   { href: "/#saving", label: "절감 원리" },
-  { href: "/#products", label: "보험상품" },
-  { href: "/partners", label: "협약단체" },
+  { href: "/#calculator", label: "절감액 계산" },
+  { href: "/#coverage", label: "취급 범위" },
   { href: "/status", label: "접수조회" },
   { href: "/faq", label: "FAQ" },
 ];

@@ -1,15 +1,21 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { randomId } from "@/lib/crypto";
-import { CASHBACK_RATE, PARTNERS, PRODUCTS, savingRate } from "@/lib/catalog";
+import {
+  CASHBACK_RATE,
+  INSURANCE_CATEGORIES,
+  PARTNERS,
+  SAVING_RATE,
+  estimatePremium,
+} from "@/lib/catalog";
 import type {
   Application,
   ApplicationStatus,
+  InsuranceCategory,
   NotificationLog,
   Partner,
   PartnerInquiry,
   PartnerSummary,
-  Product,
   Settings,
   StatusEvent,
 } from "@/lib/types";
@@ -28,7 +34,6 @@ import {
  *
  * 개발·데모 전용이다. 단일 프로세스를 전제로 하므로 서버리스 다중 인스턴스
  * 환경에서는 절대 사용하지 말 것. 운영은 pg-store(Supabase)를 쓴다.
- * 카탈로그(협약단체·상품)는 src/lib/catalog.ts 의 시드 상수를 그대로 쓴다.
  */
 
 interface Database {
@@ -44,7 +49,7 @@ const DATA_FILE = path.join(DATA_DIR, "store.json");
 
 function initialDatabase(): Database {
   return {
-    version: 1,
+    version: 2,
     settings: {
       throughputPerMinute: 12,
       lastAdvanceAt: new Date().toISOString(),
@@ -103,6 +108,14 @@ function buildTicket(queueNumber: number, at: Date): string {
   return `NP-${date}-${String(queueNumber).padStart(4, "0")}`;
 }
 
+/** 대기실·조회 화면에 보여줄 신청 요약 문구 */
+function requestLabel(app: Application): string {
+  if (app.productName) {
+    return app.insurer ? `${app.insurer} ${app.productName}` : app.productName;
+  }
+  return app.categoryName;
+}
+
 /**
  * 경과 시간과 분당 처리량만큼 대기열을 소진시킨다.
  * transaction 내부에서만 호출할 것.
@@ -134,9 +147,13 @@ function applyQueueDrain(db: Database, now: Date): Application[] {
     app.history.push({ status: "received", at });
   }
 
-  // 처리한 건수만큼만 기준 시각을 전진시켜 소수점 잔여 시간을 보존한다.
   db.settings.lastAdvanceAt = new Date(last + serving.length * msPerItem).toISOString();
   return serving;
+}
+
+/** 캐시백 정산 기준 보험료 — 확정값이 있으면 그것, 없으면 예상값 */
+function settlementPremium(app: Application): number {
+  return app.finalPremium ?? app.estimatedPremium ?? 0;
 }
 
 export const jsonStore: StoreApi = {
@@ -151,12 +168,14 @@ export const jsonStore: StoreApi = {
     return PARTNERS.find((p) => p.code === normalized && p.active) ?? null;
   },
 
-  async listProducts(): Promise<Product[]> {
-    return PRODUCTS;
+  async listCategories(): Promise<InsuranceCategory[]> {
+    return INSURANCE_CATEGORIES.filter((c) => c.active).sort(
+      (a, b) => a.sortOrder - b.sortOrder
+    );
   },
 
-  async getProduct(id: string): Promise<Product | null> {
-    return PRODUCTS.find((p) => p.id === id) ?? null;
+  async getCategory(code: string): Promise<InsuranceCategory | null> {
+    return INSURANCE_CATEGORIES.find((c) => c.code === code && c.active) ?? null;
   },
 
   /* ─────────────────────── 접수 ─────────────────────── */
@@ -165,16 +184,17 @@ export const jsonStore: StoreApi = {
     const partner = await this.getPartner(input.partnerCode);
     if (!partner) throw new InvalidCatalogError("유효하지 않은 협약단체입니다.");
 
-    const product = await this.getProduct(input.productId);
-    if (!product) throw new InvalidCatalogError("유효하지 않은 상품입니다.");
+    const category = await this.getCategory(input.categoryCode);
+    if (!category) throw new InvalidCatalogError("보험 종류를 선택해 주세요.");
 
     return transaction((db) => {
       if (db.settings.intakePaused) throw new IntakePausedError();
 
+      // 같은 사람이 같은 종류의 보험을 중복 신청하는 것만 막는다.
       const duplicate = db.applications.find(
         (a) =>
           a.phoneHash === input.phoneHash &&
-          a.productId === product.id &&
+          a.categoryCode === category.code &&
           a.status !== "cancelled" &&
           a.status !== "completed"
       );
@@ -190,6 +210,10 @@ export const jsonStore: StoreApi = {
       db.settings.lastQueueNumber = queueNumber;
 
       const aheadAtEntry = db.applications.filter((a) => a.status === "queued").length;
+      const quoted =
+        typeof input.quotedPremium === "number" && input.quotedPremium > 0
+          ? Math.round(input.quotedPremium)
+          : null;
 
       const application: Application = {
         id: randomId(),
@@ -198,15 +222,19 @@ export const jsonStore: StoreApi = {
         aheadAtEntry,
         partnerCode: partner.code,
         partnerName: partner.name,
-        productId: product.id,
-        productName: product.name,
-        designerPremium: product.designerPremium,
-        groupPremium: product.groupPremium,
+        categoryCode: category.code,
+        categoryName: category.name,
+        insurer: input.insurer.trim(),
+        productName: input.productName.trim(),
+        quotedPremium: quoted,
+        estimatedPremium: quoted === null ? null : estimatePremium(quoted),
+        finalPremium: null,
         nameEnc: input.nameEnc,
         phoneEnc: input.phoneEnc,
         birthEnc: input.birthEnc,
         phoneHash: input.phoneHash,
         gender: input.gender,
+        memo: input.memo.trim(),
         notifyOptIn: input.notifyOptIn,
         marketingOptIn: input.marketingOptIn,
         agreedAt: nowIso,
@@ -249,7 +277,11 @@ export const jsonStore: StoreApi = {
       if (filter.query) {
         const q = filter.query.trim().toUpperCase();
         rows = rows.filter(
-          (a) => a.ticket.includes(q) || a.partnerName.toUpperCase().includes(q)
+          (a) =>
+            a.ticket.includes(q) ||
+            a.partnerName.toUpperCase().includes(q) ||
+            a.insurer.toUpperCase().includes(q) ||
+            a.productName.toUpperCase().includes(q)
         );
       }
       return filter.limit ? rows.slice(0, filter.limit) : rows;
@@ -295,6 +327,19 @@ export const jsonStore: StoreApi = {
     });
   },
 
+  async setFinalPremium(id: string, amount: number | null): Promise<Application | null> {
+    return transaction((db) => {
+      const app = db.applications.find((a) => a.id === id);
+      if (!app) return null;
+      app.finalPremium =
+        amount === null || !Number.isFinite(amount) || amount <= 0
+          ? null
+          : Math.round(amount);
+      app.updatedAt = new Date().toISOString();
+      return app;
+    });
+  },
+
   /* ─────────────────────── 대기열 ─────────────────────── */
 
   async pollQueue(ticket: string): Promise<QueuePollResult> {
@@ -329,7 +374,7 @@ export const jsonStore: StoreApi = {
           totalWaiting: queued.length,
           notifyOptIn: app.notifyOptIn,
           partnerName: app.partnerName,
-          productName: app.productName,
+          requestLabel: requestLabel(app),
         },
         served,
       };
@@ -429,19 +474,18 @@ export const jsonStore: StoreApi = {
   async getPublicStats() {
     return read((db) => {
       const applications = db.applications.filter((a) => a.status !== "cancelled");
-      const totalSaving = applications.reduce(
-        (sum, a) => sum + (a.designerPremium - a.groupPremium) * 12,
-        0
-      );
-      const avgRate =
-        PRODUCTS.reduce((acc, p) => acc + savingRate(p), 0) / (PRODUCTS.length || 1);
+      // 안내받은 보험료를 입력한 건만 절감액 집계에 넣는다.
+      const totalSaving = applications.reduce((sum, a) => {
+        if (a.quotedPremium === null || a.estimatedPremium === null) return sum;
+        return sum + (a.quotedPremium - a.estimatedPremium) * 12;
+      }, 0);
 
       return {
         partnerCount: PARTNERS.filter((p) => p.active).length,
         applicationCount: applications.length,
         completedCount: applications.filter((a) => a.status === "completed").length,
         totalSaving,
-        averageSavingRate: avgRate,
+        averageSavingRate: SAVING_RATE * 100,
       };
     });
   },
@@ -479,7 +523,7 @@ export const jsonStore: StoreApi = {
         // 캐시백은 청약 완료(성사) 건만 정산 대상 — 기획서 9장
         if (app.status === "completed") {
           row.completedCount += 1;
-          row.annualizedPremium += app.groupPremium * 12;
+          row.annualizedPremium += settlementPremium(app) * 12;
         }
       }
 

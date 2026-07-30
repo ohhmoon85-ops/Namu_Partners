@@ -2,20 +2,26 @@ import Link from "next/link";
 import Reveal from "@/components/Reveal";
 import CountUp from "@/components/CountUp";
 import StickyCta from "@/components/StickyCta";
-import { savingRate } from "@/lib/catalog";
-import { getPublicStats, listPartners, listProducts } from "@/lib/store";
+import SavingCalculator from "@/components/SavingCalculator";
+import { getPublicStats, listCategories, listPartners } from "@/lib/store";
 import { COMPANY } from "@/lib/company";
-import { number, percent, won } from "@/lib/format";
-import type { Partner, Product, PublicStats } from "@/lib/types";
+import { number, percent } from "@/lib/format";
+import type { InsuranceCategory, Partner, PublicStats } from "@/lib/types";
 
 // 신뢰 지표 카운터가 실적을 반영해야 하므로 매 요청 시 렌더링한다.
 export const dynamic = "force-dynamic";
 
+/**
+ * 메인(랜딩) — 가입자 대상 화면
+ *
+ * ⚠️ 협약단체 캐시백(3%)은 이 화면에 절대 노출하지 않는다.
+ *    가입자에게는 "보험료 절감"만 전달하는 것이 운영 방침이다.
+ */
 export default async function HomePage() {
-  const [stats, partners, products] = await Promise.all([
+  const [stats, partners, categories] = await Promise.all([
     getPublicStats(),
     listPartners(),
-    listProducts(),
+    listCategories(),
   ]);
   const memberTotal = partners.reduce((sum, p) => sum + p.memberCount, 0);
 
@@ -24,8 +30,8 @@ export default async function HomePage() {
       <Hero avgRate={stats.averageSavingRate} />
       <TrustBar stats={stats} memberTotal={memberTotal} />
       <SavingPrinciple />
-      <ProductSection products={products} />
-      <CashbackSection />
+      <CalculatorSection avgRate={stats.averageSavingRate} />
+      <CoverageSection categories={categories} />
       <ProcessSection />
       <PartnerWall partners={partners} />
       <FaqTeaser />
@@ -59,7 +65,7 @@ function Hero({ avgRate }: { avgRate: number }) {
           <div>
             <Reveal>
               <span className="chip border border-gold/40 bg-gold/10 text-gold-400">
-                협약단체 전용 프로모션
+                협약단체 회원 전용
               </span>
             </Reveal>
 
@@ -73,7 +79,7 @@ function Hero({ avgRate }: { avgRate: number }) {
 
             <Reveal delay={160}>
               <p className="mt-6 text-[17px] leading-relaxed text-white/70 sm:text-lg">
-                설계사 가입 대비 평균{" "}
+                이미 알아보신 그 상품 그대로, 설계사 가입 대비 평균{" "}
                 <strong className="font-bold text-white">17.5% 절감</strong>.
                 <br className="hidden sm:block" /> 단체의 힘으로 누리는 합리적인 보험
                 &mdash; 나무파트너스
@@ -87,10 +93,10 @@ function Hero({ avgRate }: { avgRate: number }) {
                   <ArrowIcon />
                 </Link>
                 <Link
-                  href="/partners"
+                  href="/#calculator"
                   className="btn w-full border border-white/25 text-white hover:bg-white/10 sm:w-auto"
                 >
-                  협약단체로 참여하기
+                  절감액 계산해 보기
                 </Link>
               </div>
             </Reveal>
@@ -104,34 +110,33 @@ function Hero({ avgRate }: { avgRate: number }) {
             </Reveal>
           </div>
 
-          {/* 핵심 수치 카드 — 17.5% / 3% */}
+          {/* 핵심 수치 카드 — 가입자에게 전달할 값은 절감률 하나뿐이다 */}
           <Reveal delay={200} className="lg:justify-self-end">
-            <div className="grid gap-4 sm:grid-cols-2 lg:max-w-md lg:grid-cols-1">
+            <div className="grid gap-4 lg:max-w-md">
               <div className="glass">
                 <p className="text-sm font-semibold text-white/60">
-                  가입자가 아끼는 보험료
+                  설계사 경유 가입 대비
                 </p>
                 <p className="mt-2 flex items-baseline gap-1 text-white">
-                  <span className="stat-figure text-[68px] sm:text-[84px]">
+                  <span className="stat-figure text-[76px] sm:text-[96px]">
                     {avgRate.toFixed(1)}
                   </span>
-                  <span className="text-[30px] font-extrabold text-gold-400">%</span>
+                  <span className="text-[34px] font-extrabold text-gold-400">%</span>
                 </p>
                 <p className="mt-1 text-sm text-white/60">
-                  설계사 경유 가입 대비 · 동일 보장
+                  평균 보험료 절감 · 동일 보장
                 </p>
               </div>
 
               <div className="glass">
-                <p className="text-sm font-semibold text-white/60">
-                  협약단체가 받는 캐시백
+                <p className="text-sm font-semibold text-white/60">취급 범위</p>
+                <p className="mt-2 text-[26px] font-extrabold leading-tight text-white">
+                  국내 보험사
+                  <br />
+                  <span className="text-gold-400">전 상품</span>
                 </p>
-                <p className="mt-2 flex items-baseline gap-1 text-white">
-                  <span className="stat-figure text-[68px] sm:text-[84px]">3</span>
-                  <span className="text-[30px] font-extrabold text-gold-400">%</span>
-                </p>
-                <p className="mt-1 text-sm text-white/60">
-                  소속 회원이 납입한 보험료 기준
+                <p className="mt-2 text-sm leading-relaxed text-white/60">
+                  이미 알아보신 상품 그대로 가입하실 수 있습니다.
                 </p>
               </div>
             </div>
@@ -155,11 +160,7 @@ function TrustBar({
     { label: "협약 단체", value: stats.partnerCount, suffix: "개" },
     { label: "협약단체 회원", value: memberTotal, suffix: "명" },
     { label: "누적 가입 신청", value: stats.applicationCount, suffix: "건" },
-    {
-      label: "누적 절감액(연환산)",
-      value: stats.totalSaving,
-      suffix: "원",
-    },
+    { label: "누적 절감액(연환산)", value: stats.totalSaving, suffix: "원" },
   ];
 
   return (
@@ -200,9 +201,9 @@ function SavingPrinciple() {
         <p className="eyebrow">HOW IT WORKS</p>
         <h2 className="section-title mt-3">보장은 그대로, 보험료만 다이어트</h2>
         <p className="mt-4 max-w-2xl text-[15px] leading-relaxed text-muted sm:text-base">
-          보험료가 낮아지는 이유는 보장을 줄여서가 아닙니다. 개별 가입 시
-          발생하던 모집·관리 비용을 단체 단위로 묶어 구조적으로 덜어내기
-          때문입니다.
+          보험료가 낮아지는 이유는 보장을 줄여서가 아닙니다. 상품도, 보험사도,
+          약관도 똑같습니다. 개별 가입 시 발생하던 모집·관리 비용을 단체 단위로
+          묶어 구조적으로 덜어내기 때문입니다.
         </p>
       </Reveal>
 
@@ -251,8 +252,7 @@ function SavingPrinciple() {
             <ul className="mt-4 space-y-3">
               {[
                 { label: "순보험료 (실제 보장 재원)", width: 72, tone: "base" },
-                { label: "단체 일괄 접수·관리 비용", width: 7, tone: "ok" },
-                { label: "협약단체 캐시백 재원", width: 3, tone: "gold" },
+                { label: "단체 일괄 접수·관리 비용", width: 10, tone: "ok" },
               ].map((row) => (
                 <li key={row.label}>
                   <div className="flex items-center justify-between text-[13px]">
@@ -262,11 +262,7 @@ function SavingPrinciple() {
                   <div className="mt-1.5 h-2.5 overflow-hidden rounded-full bg-white">
                     <div
                       className={`h-full rounded-full ${
-                        row.tone === "gold"
-                          ? "bg-gold"
-                          : row.tone === "ok"
-                            ? "bg-emerald-400"
-                            : "bg-navy"
+                        row.tone === "ok" ? "bg-emerald-400" : "bg-navy"
                       }`}
                       style={{ width: `${row.width}%` }}
                     />
@@ -275,9 +271,7 @@ function SavingPrinciple() {
               ))}
             </ul>
             <p className="mt-6 rounded-xl border border-gold/30 bg-white p-4 text-[13px] leading-relaxed text-navy-900">
-              <strong className="font-bold">
-                덜어낸 약 17.5%는 보험료 인하로, 3%는 협약단체 캐시백으로
-              </strong>{" "}
+              <strong className="font-bold">덜어낸 만큼이 그대로 보험료 인하로</strong>{" "}
               돌아갑니다. 보장 내용과 약관은 설계사 가입과 동일합니다.
             </p>
           </div>
@@ -294,171 +288,86 @@ function SavingPrinciple() {
   );
 }
 
-/* ────────────── 상품별 절감액 비교 (기획서 4.2 2단계) ────────────── */
+/* ──────────────── 절감액 계산기 ──────────────── */
 
-function ProductSection({ products }: { products: Product[] }) {
+function CalculatorSection({ avgRate }: { avgRate: number }) {
   return (
-    <section id="products" className="scroll-mt-20 bg-mist py-20 sm:py-28">
+    <section id="calculator" className="scroll-mt-20 bg-mist py-20 sm:py-28">
       <div className="container-np">
-        <Reveal>
-          <p className="eyebrow">PRODUCTS</p>
-          <h2 className="section-title mt-3">혼자 가입하면 정가, 함께 가입하면 특가</h2>
-          <p className="mt-4 max-w-2xl text-[15px] leading-relaxed text-muted sm:text-base">
-            협약단체 회원에게 제공되는 단체 전용 보험료입니다. 설계사 경유
-            보험료와 나란히 비교해 보세요.
-          </p>
-        </Reveal>
+        <div className="grid gap-10 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
+          <Reveal>
+            <p className="eyebrow">CALCULATOR</p>
+            <h2 className="section-title mt-3">
+              지금 안내받은 보험료,
+              <br />
+              얼마나 줄어들까요?
+            </h2>
+            <p className="mt-4 text-[15px] leading-relaxed text-muted">
+              설계사나 비교사이트에서 안내받은 월 보험료를 넣어 보세요.
+              같은 상품을 나무파트너스로 가입하면 평균{" "}
+              <strong className="font-semibold text-navy">
+                {percent(avgRate)}
+              </strong>{" "}
+              저렴해집니다.
+            </p>
+            <ul className="mt-8 space-y-3 text-[14px] text-muted">
+              <li className="flex gap-2.5">
+                <span className="text-gold">✓</span> 보장 내용·약관 동일
+              </li>
+              <li className="flex gap-2.5">
+                <span className="text-gold">✓</span> 보험사도 그대로
+              </li>
+              <li className="flex gap-2.5">
+                <span className="text-gold">✓</span> 추가 비용 없음
+              </li>
+            </ul>
+          </Reveal>
 
-        <div className="mt-12 grid gap-5 sm:grid-cols-2">
-          {products.map((product, i) => {
-            const monthlySaving = product.designerPremium - product.groupPremium;
-            return (
-              <Reveal key={product.id} delay={i * 80}>
-                <article className="card flex h-full flex-col">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <h3 className="text-[17px] font-bold text-navy-900">
-                        {product.name}
-                      </h3>
-                      <p className="mt-1.5 text-[13px] leading-relaxed text-muted">
-                        {product.summary}
-                      </p>
-                    </div>
-                    <span className="chip shrink-0 bg-navy text-white">
-                      {percent(savingRate(product))} ↓
-                    </span>
-                  </div>
-
-                  <ul className="mt-5 grid gap-2 border-y border-line py-4">
-                    {product.coverages.map((c) => (
-                      <li
-                        key={c.label}
-                        className="flex items-center justify-between text-[13px]"
-                      >
-                        <span className="text-muted">{c.label}</span>
-                        <span className="font-semibold text-navy-900">{c.amount}</span>
-                      </li>
-                    ))}
-                  </ul>
-
-                  <div className="mt-5 flex items-end justify-between gap-4">
-                    <div>
-                      <p className="text-[12px] text-muted">설계사 경유</p>
-                      <p className="text-[15px] font-medium text-muted line-through">
-                        {won(product.designerPremium)}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-[12px] font-semibold text-gold">단체 전용가</p>
-                      <p className="text-[26px] font-extrabold leading-tight text-navy-900">
-                        {won(product.groupPremium)}
-                        <span className="text-[13px] font-semibold text-muted"> /월</span>
-                      </p>
-                    </div>
-                  </div>
-
-                  <p className="mt-3 rounded-lg bg-gold-50 px-3 py-2 text-center text-[13px] font-semibold text-navy-900">
-                    매월 {won(monthlySaving)} · 연 {won(monthlySaving * 12)} 절감
-                  </p>
-
-                  <p className="mt-4 text-[12px] leading-relaxed text-muted">
-                    가입 조건 · {product.eligibility}
-                  </p>
-
-                  <Link
-                    href={`/apply?product=${product.id}`}
-                    className="btn-ghost mt-5 w-full"
-                  >
-                    이 상품으로 신청하기
-                  </Link>
-                </article>
-              </Reveal>
-            );
-          })}
+          <Reveal delay={120}>
+            <SavingCalculator />
+          </Reveal>
         </div>
-
-        <Reveal>
-          <p className="mt-8 text-[12px] leading-relaxed text-muted">
-            * 표기 보험료는 40세 남성·표준체 기준 예시이며, 실제 보험료는 연령·성별·직업·가입
-            담보에 따라 달라집니다. 최종 보험료는 상담 단계에서 안내됩니다.
-          </p>
-        </Reveal>
       </div>
     </section>
   );
 }
 
-/* ───────────── 협약단체 캐시백 구조 도해 (기획서 3.2 · 4.1) ───────────── */
+/* ──────────────── 취급 범위 ──────────────── */
 
-function CashbackSection() {
-  const steps = [
-    {
-      title: "협약 체결",
-      body: "단체와 나무파트너스가 단체보험 프로모션 협약을 체결합니다.",
-    },
-    {
-      title: "회원 안내",
-      body: "단체 전용 링크·QR로 소속 회원에게 가입을 안내합니다.",
-    },
-    {
-      title: "회원 가입",
-      body: "회원은 동일 보장을 평균 17.5% 저렴한 보험료로 가입합니다.",
-    },
-    {
-      title: "3% 캐시백",
-      body: "회원이 납입한 보험료의 3%를 단체에 정산·지급합니다.",
-    },
-  ];
-
+function CoverageSection({ categories }: { categories: InsuranceCategory[] }) {
   return (
-    <section id="cashback" className="scroll-mt-20 bg-navy py-20 text-white sm:py-28">
-      <div className="container-np">
-        <div className="grid gap-14 lg:grid-cols-[0.9fr_1.1fr]">
-          <Reveal>
-            <p className="eyebrow">FOR PARTNERS</p>
-            <h2 className="mt-3 text-balance text-[26px] font-extrabold leading-tight tracking-tight sm:text-[34px]">
-              회원에게는 절감을,
-              <br />
-              단체에는 재정을.
-            </h2>
-            <p className="mt-5 text-[15px] leading-relaxed text-white/70">
-              회원이 가입한 보험료의{" "}
-              <strong className="font-bold text-gold-400">3%를 단체에 캐시백</strong>
-              합니다. 회원 복지와 단체 재정확보를 한 번에 해결하는 협약
-              프로그램입니다.
-            </p>
-            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-              <Link href="/partners" className="btn-gold">
-                협약 문의하기
-              </Link>
-              <Link
-                href="/partners#simulator"
-                className="btn border border-white/25 text-white hover:bg-white/10"
-              >
-                캐시백 계산해 보기
-              </Link>
+    <section id="coverage" className="container-np scroll-mt-20 py-20 sm:py-28">
+      <Reveal>
+        <p className="eyebrow">COVERAGE</p>
+        <h2 className="section-title mt-3">
+          어떤 보험이든, 이미 정하신 그대로
+        </h2>
+        <p className="mt-4 max-w-2xl text-[15px] leading-relaxed text-muted sm:text-base">
+          나무파트너스는 특정 상품을 권유하지 않습니다. 국내 보험사의 상품을
+          두루 취급하므로, 이미 알아보신 보험사와 상품 그대로 더 저렴하게
+          가입하실 수 있습니다.
+        </p>
+      </Reveal>
+
+      <ul className="mt-12 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {categories.map((category, i) => (
+          <Reveal key={category.code} delay={i * 50} as="li">
+            <div className="card h-full">
+              <p className="text-[15px] font-bold text-navy-900">{category.name}</p>
+              <p className="mt-2 text-[13px] leading-relaxed text-muted">
+                {category.examples}
+              </p>
             </div>
           </Reveal>
+        ))}
+      </ul>
 
-          <Reveal delay={120}>
-            <ol className="relative space-y-4">
-              {steps.map((step, i) => (
-                <li key={step.title} className="glass flex gap-4">
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gold text-sm font-extrabold text-white">
-                    {i + 1}
-                  </span>
-                  <div>
-                    <p className="text-[15px] font-bold">{step.title}</p>
-                    <p className="mt-1 text-[13px] leading-relaxed text-white/65">
-                      {step.body}
-                    </p>
-                  </div>
-                </li>
-              ))}
-            </ol>
-          </Reveal>
-        </div>
-      </div>
+      <Reveal>
+        <p className="mt-8 text-[12px] leading-relaxed text-muted">
+          * 보험사·상품에 따라 단체 가입이 제한되거나 인수 조건이 다를 수 있습니다.
+          신청하시면 담당자가 가입 가능 여부를 확인해 안내해 드립니다.
+        </p>
+      </Reveal>
     </section>
   );
 }
@@ -468,30 +377,32 @@ function CashbackSection() {
 function ProcessSection() {
   const steps = [
     { no: "01", title: "소속 단체 선택", body: "단체 목록에서 선택하거나 단체 코드를 입력합니다." },
-    { no: "02", title: "상품 선택", body: "설계사 가격 대비 절감액을 확인하고 상품을 고릅니다." },
+    { no: "02", title: "원하는 보험 알려주기", body: "보험 종류와 알아보신 보험사·상품명, 안내받은 보험료를 적습니다." },
     { no: "03", title: "정보 입력·동의", body: "이름·연락처·생년월일만 입력합니다. 주민번호는 받지 않습니다." },
     { no: "04", title: "접수 완료", body: "접수번호가 발급되며, 신청이 몰릴 경우 대기실로 안내됩니다." },
-    { no: "05", title: "상담·청약", body: "담당자가 연락드려 청약 절차를 진행합니다." },
+    { no: "05", title: "상담·청약", body: "담당자가 연락드려 가입 가능 여부와 최종 보험료를 안내합니다." },
   ];
 
   return (
-    <section className="container-np py-20 sm:py-28">
-      <Reveal>
-        <p className="eyebrow">PROCESS</p>
-        <h2 className="section-title mt-3">신청은 3분, 절차는 5단계</h2>
-      </Reveal>
+    <section className="bg-mist py-20 sm:py-28">
+      <div className="container-np">
+        <Reveal>
+          <p className="eyebrow">PROCESS</p>
+          <h2 className="section-title mt-3">신청은 3분, 절차는 5단계</h2>
+        </Reveal>
 
-      <ol className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-        {steps.map((step, i) => (
-          <Reveal key={step.no} delay={i * 70} as="li">
-            <div className="card h-full">
-              <span className="stat-figure text-[28px] text-gold-200">{step.no}</span>
-              <p className="mt-3 text-[15px] font-bold text-navy-900">{step.title}</p>
-              <p className="mt-2 text-[13px] leading-relaxed text-muted">{step.body}</p>
-            </div>
-          </Reveal>
-        ))}
-      </ol>
+        <ol className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+          {steps.map((step, i) => (
+            <Reveal key={step.no} delay={i * 70} as="li">
+              <div className="card h-full">
+                <span className="stat-figure text-[28px] text-gold-200">{step.no}</span>
+                <p className="mt-3 text-[15px] font-bold text-navy-900">{step.title}</p>
+                <p className="mt-2 text-[13px] leading-relaxed text-muted">{step.body}</p>
+              </div>
+            </Reveal>
+          ))}
+        </ol>
+      </div>
     </section>
   );
 }
@@ -500,7 +411,7 @@ function ProcessSection() {
 
 function PartnerWall({ partners }: { partners: Partner[] }) {
   return (
-    <section className="border-y border-line bg-mist py-16">
+    <section className="border-y border-line bg-white py-16">
       <div className="container-np">
         <Reveal>
           <p className="text-center text-[13px] font-semibold uppercase tracking-[0.18em] text-muted">
@@ -537,15 +448,15 @@ function PartnerWall({ partners }: { partners: Partner[] }) {
 const HOME_FAQ = [
   {
     q: "보험료가 저렴하면 보장도 줄어드나요?",
-    a: "아닙니다. 동일한 보험사의 동일한 약관·동일한 보장으로 가입합니다. 개별 모집 과정에서 발생하던 비용을 단체 단위로 줄인 것이므로 보장 내용에는 차이가 없습니다.",
+    a: "아닙니다. 같은 보험사의 같은 상품, 같은 약관으로 가입합니다. 개별 모집 과정에서 발생하던 비용을 단체 단위로 줄인 것이므로 보장 내용에는 차이가 없습니다.",
+  },
+  {
+    q: "제가 알아본 상품 그대로 가입할 수 있나요?",
+    a: "네. 나무파트너스는 특정 상품을 권유하지 않고 국내 보험사의 상품을 두루 취급합니다. 알아보신 보험사와 상품명을 알려주시면 가입 가능 여부를 확인해 안내해 드립니다.",
   },
   {
     q: "협약단체 회원이 아니어도 가입할 수 있나요?",
-    a: "본 프로모션은 협약단체 소속 회원을 대상으로 운영됩니다. 소속 단체가 아직 협약을 맺지 않았다면 협약 문의 페이지를 통해 단체 담당자께 안내해 주세요.",
-  },
-  {
-    q: "신청하면 바로 보험에 가입되나요?",
-    a: "신청은 가입 상담 접수입니다. 접수 후 담당자가 연락드려 보장 내용과 보험료를 안내하고, 최종 청약은 관련 법령에 따른 유자격 모집조직을 통해 진행됩니다.",
+    a: "본 프로모션은 협약단체 소속 회원을 대상으로 운영됩니다. 소속 단체가 아직 협약을 맺지 않았다면 단체 담당자께 문의해 주세요.",
   },
 ];
 
@@ -599,21 +510,21 @@ function FinalCta() {
           />
           <div className="relative">
             <h2 className="text-balance text-[26px] font-extrabold leading-tight text-white sm:text-[34px]">
-              우리 단체도 함께할 수 있나요?
+              같은 보험을 더 싸게 가입하는 방법
             </h2>
             <p className="mx-auto mt-4 max-w-xl text-[15px] leading-relaxed text-white/65">
-              회원 수 100명 이상이면 협약 검토가 가능합니다. 회원에게는 보험료
-              절감을, 단체에는 3% 캐시백을 제공하세요.
+              이미 알아보신 상품이 있다면 3분이면 충분합니다. 소속 단체와 원하시는
+              보험만 알려주세요.
             </p>
             <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
               <Link href="/apply" className="btn-gold">
                 내 보험료 확인하기
               </Link>
               <Link
-                href="/partners"
+                href="/status"
                 className="btn border border-white/25 text-white hover:bg-white/10"
               >
-                협약 문의하기
+                접수 조회하기
               </Link>
             </div>
           </div>

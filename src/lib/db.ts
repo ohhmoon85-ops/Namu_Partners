@@ -97,7 +97,7 @@ export async function transaction<T>(
 export const PG_ERROR = {
   INTAKE_PAUSED: "NP001",
   INVALID_PARTNER: "NP002",
-  INVALID_PRODUCT: "NP003",
+  INVALID_CATEGORY: "NP003",
   DUPLICATE_APPLICATION: "NP004",
   APPLICATION_NOT_FOUND: "NP005",
 } as const;

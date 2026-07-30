@@ -1,12 +1,14 @@
-import type { Partner, Product } from "./types";
+import type { InsuranceCategory, Partner } from "./types";
 
 /**
- * 협약단체 · 보험상품 시드 데이터
+ * 협약단체 · 보험 종류 시드 데이터
  *
- * ⚠️ 아래 값은 화면 검증용 예시 데이터입니다.
- *    - 협약단체 목록: 실제 협약 체결 결과로 교체해야 합니다.
- *    - 보험료: 제휴 보험사가 확정한 요율로 교체해야 하며,
- *      확정 전까지 대외 노출용으로 사용해서는 안 됩니다. (기획서 9장 광고 규제)
+ * ⚠️ 협약단체 목록은 화면 검증용 예시입니다. 실제 협약 체결 결과로 교체하세요.
+ *
+ * 보험 상품 목록은 두지 않습니다. 나무파트너스는 특정 상품을 판매하는 것이
+ * 아니라 국내 보험사의 상품 전반을 취급하며, 가입자는 시장에서 이미 상품을
+ * 정한 뒤 더 저렴하게 가입하러 옵니다. 따라서 플랫폼은 "어떤 종류인지"만
+ * 분류받고, 보험사·상품명·안내받은 보험료는 가입자가 직접 입력합니다.
  */
 
 export const PARTNERS: Partner[] = [
@@ -52,88 +54,105 @@ export const PARTNERS: Partner[] = [
   },
 ];
 
-export const PRODUCTS: Product[] = [
+/** 가입 신청 시 선택하는 보험 종류 */
+export const INSURANCE_CATEGORIES: InsuranceCategory[] = [
   {
-    id: "acc-plus",
-    name: "나무 단체상해보험 플러스",
-    summary: "일상·업무 중 상해를 폭넓게 보장하는 기본형 단체상해보험",
-    coverages: [
-      { label: "상해사망", amount: "1억 원" },
-      { label: "상해후유장해", amount: "1억 원 한도" },
-      { label: "상해입원일당", amount: "3만 원 / 일" },
-      { label: "골절·화상 진단", amount: "50만 원" },
-    ],
-    designerPremium: 32000,
-    groupPremium: 26400,
-    eligibility: "만 15세 ~ 만 70세 · 협약단체 소속 회원 및 배우자",
-    featured: true,
+    code: "medical",
+    name: "실손의료비 (실비)",
+    examples: "입원·통원 실제 부담 의료비",
+    sortOrder: 1,
+    active: true,
   },
   {
-    id: "med-real",
-    name: "나무 단체실손의료비",
-    summary: "입원·통원 실제 부담 의료비를 보장하는 4세대 실손 단체형",
-    coverages: [
-      { label: "질병입원 의료비", amount: "5,000만 원" },
-      { label: "질병통원 의료비", amount: "20만 원 / 회" },
-      { label: "상해입원 의료비", amount: "5,000만 원" },
-      { label: "비급여 3종 특약", amount: "약관 기준" },
-    ],
-    designerPremium: 45000,
-    groupPremium: 37100,
-    eligibility: "만 19세 ~ 만 65세 · 기존 실손 보유자는 중복 가입 불가",
+    code: "critical",
+    name: "암·3대질병",
+    examples: "암, 뇌혈관질환, 허혈성심장질환 진단비",
+    sortOrder: 2,
+    active: true,
   },
   {
-    id: "life-term",
-    name: "나무 단체정기보험",
-    summary: "가장의 소득 상실 위험에 대비하는 사망 보장 중심 정기보험",
-    coverages: [
-      { label: "일반사망", amount: "2억 원" },
-      { label: "재해사망", amount: "3억 원" },
-      { label: "장해 시 보험료 납입면제", amount: "50% 이상 장해" },
-    ],
-    designerPremium: 58000,
-    groupPremium: 47900,
-    eligibility: "만 20세 ~ 만 60세 · 보험기간 20년 만기",
+    code: "life",
+    name: "종신·정기 (사망보장)",
+    examples: "종신보험, 정기보험, 유족 생활자금",
+    sortOrder: 3,
+    active: true,
   },
   {
-    id: "health-3",
-    name: "나무 단체건강보험 (3대질병)",
-    summary: "암·뇌혈관·심장질환 진단비를 집중 보장하는 종합 건강보험",
-    coverages: [
-      { label: "암 진단비", amount: "5,000만 원" },
-      { label: "뇌혈관질환 진단비", amount: "3,000만 원" },
-      { label: "허혈성심장질환 진단비", amount: "3,000만 원" },
-      { label: "질병수술비", amount: "100만 원" },
-    ],
-    designerPremium: 72000,
-    groupPremium: 59400,
-    eligibility: "만 20세 ~ 만 65세 · 가입 전 고지의무 대상",
-    featured: true,
+    code: "accident",
+    name: "상해·재해",
+    examples: "상해사망·후유장해, 골절, 입원일당",
+    sortOrder: 4,
+    active: true,
+  },
+  {
+    code: "driver",
+    name: "운전자",
+    examples: "교통사고처리지원금, 변호사 선임비용, 벌금",
+    sortOrder: 5,
+    active: true,
+  },
+  {
+    code: "child",
+    name: "어린이·태아",
+    examples: "자녀 종합보장, 태아보험",
+    sortOrder: 6,
+    active: true,
+  },
+  {
+    code: "dental",
+    name: "치아",
+    examples: "임플란트, 크라운, 충전치료",
+    sortOrder: 7,
+    active: true,
+  },
+  {
+    code: "care",
+    name: "간병·치매",
+    examples: "장기요양등급, 치매 진단·간병자금",
+    sortOrder: 8,
+    active: true,
+  },
+  {
+    code: "property",
+    name: "화재·재물",
+    examples: "주택화재, 상가·사업장 재물, 배상책임",
+    sortOrder: 9,
+    active: true,
+  },
+  {
+    code: "etc",
+    name: "기타 / 잘 모르겠어요",
+    examples: "위에 없는 보험이거나 상담을 통해 정하고 싶은 경우",
+    sortOrder: 10,
+    active: true,
   },
 ];
 
-export function getProduct(id: string): Product | undefined {
-  return PRODUCTS.find((p) => p.id === id);
+export function getCategory(code: string): InsuranceCategory | undefined {
+  return INSURANCE_CATEGORIES.find((c) => c.code === code && c.active);
 }
 
 export function getPartner(code: string): Partner | undefined {
-  const normalized = code.trim().toUpperCase();
+  const normalized = (code ?? "").trim().toUpperCase();
   return PARTNERS.find((p) => p.code === normalized && p.active);
 }
 
-/** 상품별 절감률(%) */
-export function savingRate(product: Product): number {
-  return ((product.designerPremium - product.groupPremium) / product.designerPremium) * 100;
+/**
+ * 평균 절감률 — 랜딩의 "평균 17.5%" 표기 기준값.
+ * 기획서 3.3 각주 요구사항에 따라 산출 근거를 화면에 병기한다.
+ * (근거 문구는 src/lib/company.ts 의 savingBasis)
+ */
+export const SAVING_RATE = 0.175;
+
+/** 안내받은 보험료로부터 예상 보험료를 계산한다. */
+export function estimatePremium(quotedPremium: number): number {
+  return Math.round(quotedPremium * (1 - SAVING_RATE));
 }
 
 /**
- * 전 상품 평균 절감률 — 랜딩의 "평균 17.5%" 표기 근거.
- * 기획서 3.3 각주 요구사항에 따라 산출 기준을 화면에 병기한다.
+ * 협약단체 캐시백 비율.
+ *
+ * ⚠️ 이 값과 관련된 어떤 수치도 가입자(회원) 대상 화면에 노출하지 않는다.
+ *    관리자 화면과 협약단체 전용 안내 페이지에서만 사용한다.
  */
-export function averageSavingRate(): number {
-  const sum = PRODUCTS.reduce((acc, p) => acc + savingRate(p), 0);
-  return sum / PRODUCTS.length;
-}
-
-/** 협약단체 캐시백 비율 */
 export const CASHBACK_RATE = 0.03;

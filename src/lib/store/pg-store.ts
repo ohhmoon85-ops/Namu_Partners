@@ -2,11 +2,11 @@ import { PG_ERROR, pgErrorCode, query, queryOne } from "@/lib/db";
 import type {
   Application,
   ApplicationStatus,
+  InsuranceCategory,
   NotificationLog,
   Partner,
   PartnerInquiry,
   PartnerSummary,
-  Product,
   PublicStats,
   Settings,
   StatusEvent,
@@ -26,8 +26,7 @@ import {
  * Supabase(Postgres) 저장소 — `namu` 스키마
  *
  * 순번 발급·대기열 소진·중복 차단은 DB 함수가 원자적으로 처리한다.
- * (db/supabase/001_init_namu.sql 참고)
- * 서버리스에서 인스턴스가 여러 개 떠도 순번이 어긋나지 않는 이유가 여기에 있다.
+ * (db/supabase/001_init_namu.sql, 002_market_products.sql 참고)
  */
 
 /* ─────────────────────── 행 → 도메인 매핑 ─────────────────────── */
@@ -41,6 +40,12 @@ function iso(value: unknown): string {
     return Number.isNaN(d.getTime()) ? value : d.toISOString();
   }
   return new Date(0).toISOString();
+}
+
+function num(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
 }
 
 function mapHistory(value: unknown): StatusEvent[] {
@@ -61,15 +66,19 @@ function mapApplication(row: Row): Application {
     aheadAtEntry: Number(row.ahead_at_entry),
     partnerCode: String(row.partner_code),
     partnerName: String(row.partner_name),
-    productId: String(row.product_id),
-    productName: String(row.product_name),
-    designerPremium: Number(row.designer_premium),
-    groupPremium: Number(row.group_premium),
+    categoryCode: String(row.category_code ?? ""),
+    categoryName: String(row.category_name ?? ""),
+    insurer: String(row.insurer ?? ""),
+    productName: String(row.product_name ?? ""),
+    quotedPremium: num(row.quoted_premium),
+    estimatedPremium: num(row.estimated_premium),
+    finalPremium: num(row.final_premium),
     nameEnc: String(row.name_enc),
     phoneEnc: String(row.phone_enc),
     birthEnc: String(row.birth_enc),
     phoneHash: String(row.phone_hash),
     gender: (row.gender as "M" | "F" | "") ?? "",
+    memo: String(row.memo ?? ""),
     notifyOptIn: Boolean(row.notify_opt_in),
     marketingOptIn: Boolean(row.marketing_opt_in),
     agreedAt: iso(row.agreed_at),
@@ -92,16 +101,13 @@ function mapPartner(row: Row): Partner {
   };
 }
 
-function mapProduct(row: Row): Product {
+function mapCategory(row: Row): InsuranceCategory {
   return {
-    id: String(row.id),
+    code: String(row.code),
     name: String(row.name),
-    summary: String(row.summary ?? ""),
-    coverages: (row.coverages as Product["coverages"]) ?? [],
-    designerPremium: Number(row.designer_premium),
-    groupPremium: Number(row.group_premium),
-    eligibility: String(row.eligibility ?? ""),
-    featured: Boolean(row.featured),
+    examples: String(row.examples ?? ""),
+    sortOrder: Number(row.sort_order ?? 0),
+    active: Boolean(row.active),
   };
 }
 
@@ -179,19 +185,19 @@ export const pgStore: StoreApi = {
     return row ? mapPartner(row) : null;
   },
 
-  async listProducts(): Promise<Product[]> {
+  async listCategories(): Promise<InsuranceCategory[]> {
     const rows = await query(
-      `select * from namu.products where active order by sort_order, id`
+      `select * from namu.insurance_categories where active order by sort_order, code`
     );
-    return rows.map(mapProduct);
+    return rows.map(mapCategory);
   },
 
-  async getProduct(id: string): Promise<Product | null> {
+  async getCategory(code: string): Promise<InsuranceCategory | null> {
     const row = await queryOne(
-      `select * from namu.products where id = $1 and active`,
-      [id ?? ""]
+      `select * from namu.insurance_categories where code = $1 and active`,
+      [code ?? ""]
     );
-    return row ? mapProduct(row) : null;
+    return row ? mapCategory(row) : null;
   },
 
   /* 접수 ------------------------------------------------------------- */
@@ -200,10 +206,15 @@ export const pgStore: StoreApi = {
     let created: Row | null;
     try {
       created = await queryOne(
-        `select * from namu.create_application($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+        `select * from namu.create_application(
+           $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
         [
           input.partnerCode,
-          input.productId,
+          input.categoryCode,
+          input.insurer,
+          input.productName,
+          input.quotedPremium,
+          input.memo,
           input.nameEnc,
           input.phoneEnc,
           input.birthEnc,
@@ -214,22 +225,21 @@ export const pgStore: StoreApi = {
         ]
       );
     } catch (error) {
-      // DB 함수가 던진 SQLSTATE 를 애플리케이션 오류로 옮긴다.
       switch (pgErrorCode(error)) {
         case PG_ERROR.INTAKE_PAUSED:
           throw new IntakePausedError();
         case PG_ERROR.INVALID_PARTNER:
           throw new InvalidCatalogError("유효하지 않은 협약단체입니다.");
-        case PG_ERROR.INVALID_PRODUCT:
-          throw new InvalidCatalogError("유효하지 않은 상품입니다.");
+        case PG_ERROR.INVALID_CATEGORY:
+          throw new InvalidCatalogError("보험 종류를 선택해 주세요.");
         case PG_ERROR.DUPLICATE_APPLICATION: {
           // 안내 문구에 기존 접수번호를 담기 위해 한 번 더 조회한다.
           const existing = await queryOne<{ ticket: string }>(
             `select ticket from namu.applications
-              where phone_hash = $1 and product_id = $2
+              where phone_hash = $1 and category_code = $2
                 and status not in ('completed', 'cancelled')
               limit 1`,
-            [input.phoneHash, input.productId]
+            [input.phoneHash, input.categoryCode]
           );
           throw new DuplicateApplicationError(existing?.ticket);
         }
@@ -281,8 +291,10 @@ export const pgStore: StoreApi = {
     }
     if (filter.query?.trim()) {
       params.push(`%${filter.query.trim().toUpperCase()}%`);
+      const p = `$${params.length}`;
       conditions.push(
-        `(a.ticket like $${params.length} or upper(a.partner_name) like $${params.length})`
+        `(a.ticket like ${p} or upper(a.partner_name) like ${p}
+          or upper(a.insurer) like ${p} or upper(a.product_name) like ${p})`
       );
     }
     params.push(Math.min(Math.max(filter.limit ?? 200, 1), 1000));
@@ -332,6 +344,18 @@ export const pgStore: StoreApi = {
     return row ? this.getById(row.id) : null;
   },
 
+  async setFinalPremium(id: string, amount: number | null): Promise<Application | null> {
+    const value =
+      amount === null || !Number.isFinite(amount) || amount <= 0
+        ? null
+        : Math.round(amount);
+    const row = await queryOne(
+      `update namu.applications set final_premium = $2 where id = $1 returning id`,
+      [id, value]
+    );
+    return row ? this.getById(id) : null;
+  },
+
   /* 대기열 ----------------------------------------------------------- */
 
   async pollQueue(ticket: string): Promise<QueuePollResult> {
@@ -352,10 +376,10 @@ export const pgStore: StoreApi = {
       totalWaiting: Number(row.total_waiting),
       notifyOptIn: Boolean(row.notify_opt_in),
       partnerName: String(row.partner_name),
-      productName: String(row.product_name),
+      requestLabel: String(row.request_label ?? ""),
     };
 
-    // 이번 호출로 접수 확정된 건이 있을 때만 추가 조회한다 (대부분의 폴링은 빈 배열).
+    // 이번 호출로 접수 확정된 건이 있을 때만 추가 조회한다.
     const servedTickets = (row.served_tickets as string[] | null) ?? [];
     if (servedTickets.length === 0) return { snapshot, served: [] };
 
@@ -484,11 +508,7 @@ export const pgStore: StoreApi = {
 
   async getPublicStats(): Promise<PublicStats> {
     const row = await queryOne(
-      `select s.*,
-              (select coalesce(avg(
-                        (designer_premium - group_premium)::numeric
-                        / designer_premium * 100), 0)
-                 from namu.products where active) as average_saving_rate
+      `select s.*, (namu.saving_rate() * 100) as average_saving_rate
          from namu.public_stats() s`
     );
     return {
