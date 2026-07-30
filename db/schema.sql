@@ -1,5 +1,15 @@
 -- ─────────────────────────────────────────────────────────────
--- 나무파트너스 단체보험 플랫폼 — Postgres 스키마
+-- 나무파트너스 단체보험 플랫폼 — Postgres 스키마 (일반 참고용)
+--
+-- ⚠️ 실제 배포 대상인 Supabase(katusa-membership)에는 이 파일이 아니라
+--    db/supabase/001_init_namu.sql 을 실행하세요.
+--    그 파일이 이 배포의 기준(authoritative)이며, 아래 내용에 더해
+--      · 전용 스키마 `namu` 격리 (여러 앱이 한 프로젝트를 공유하므로 필수)
+--      · 대기열 원자 처리 함수 (create_application / drain_queue / poll_queue)
+--      · RLS 및 service_role 전용 권한
+--      · 시드 데이터
+--    를 포함합니다. 이 파일은 다른 Postgres 로 옮길 때의 참고용 테이블 정의입니다.
+--
 -- (Vercel Postgres / Supabase 공통, 기획서 6장)
 --
 -- 현재 애플리케이션은 로컬 JSON 스토어(src/lib/store.ts)로 동작한다.

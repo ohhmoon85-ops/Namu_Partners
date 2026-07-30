@@ -143,10 +143,45 @@ npm run start
 
 > ⚠️ **서버리스(Vercel) 다중 인스턴스 배포 전 반드시 교체해야 합니다.**
 > 파일 스토어는 단일 프로세스를 전제로 하며, 인스턴스마다 별도 파일을 갖게 됩니다.
-> `db/schema.sql` 에 동일 구조의 Postgres 스키마(Vercel Postgres / Supabase 공통)를
-> 정의해 두었으므로, `store.ts` 의 각 함수 본문만 SQL 로 교체하면 됩니다
-> (외부 인터페이스 변경 없음). 순번은 `queue_number_seq` 시퀀스가, 중복 접수 방지는
-> 부분 유니크 인덱스가 담당합니다.
+> 이행 대상 스키마는 아래 Supabase 절을 참고하세요.
+
+### Supabase 적용 (`db/supabase/001_init_namu.sql`)
+
+이 프로젝트가 사용할 Supabase 인스턴스는 **여러 백엔드(앱)가 동시에 공유**합니다.
+따라서 `public` 스키마를 쓰지 않고 전용 스키마 **`namu`** 로 완전히 격리했습니다.
+
+| 스키마 | 사용 주체 |
+| --- | --- |
+| `public` | 기존 앱(katusa-membership 등) — 건드리지 않음 |
+| `namu` | 나무파트너스 단체보험 플랫폼 |
+
+적용 방법: Supabase 대시보드 → **SQL Editor** → `db/supabase/001_init_namu.sql`
+전체를 붙여넣고 실행합니다. 멱등하게 작성되어 여러 번 실행해도 안전합니다.
+
+스크립트가 포함하는 것:
+
+- 테이블 8종, 열거형, 순번 시퀀스, 인덱스, 협약단체 집계 뷰
+- **대기열 로직을 DB 함수로 이관** — 서버리스는 인스턴스가 여러 개 뜨므로
+  순번 발급과 대기열 소진을 앱 메모리에서 계산하면 순번이 어긋납니다.
+  `settings` 행을 잠가 직렬화합니다.
+  | 함수 | 역할 |
+  | --- | --- |
+  | `namu.create_application(...)` | 대기열 소진 → 순번 발급 → 중복 차단을 한 트랜잭션에서 처리 |
+  | `namu.drain_queue()` | 경과 시간 × 분당 처리량만큼 소진, 알림 대상 반환 |
+  | `namu.poll_queue(ticket)` | 대기실 스냅샷(앞 대기 인원·진행률·예상 시간) |
+  | `namu.serve_next(n)` / `namu.set_status(...)` | 관리자 수동 처리 / 상태 변경 |
+  | `namu.lookup_application(ticket, hash)` | 접수 조회 (해시 대조) |
+  | `namu.partner_summaries` (뷰) / `namu.public_stats()` | 캐시백 집계 / 신뢰 지표 |
+- 상태 이력 자동 기록 트리거 (Table Editor 에서 직접 바꿔도 누락 없음)
+- RLS 전면 활성화 + 정책 0개 = anon/authenticated 기본 거부, `service_role` 만 접근
+- 협약단체·상품 시드 데이터
+
+**실행 후 반드시 확인:** Settings → API → *Exposed schemas* 에 `namu` 를
+**추가하지 마세요.** 개인정보가 있는 서버 전용 스키마이며, 클라이언트에서
+직접 접근할 수 없어야 합니다. 앱 서버는 서비스 롤 키 또는 직접 커넥션
+(서버리스는 6543 트랜잭션 풀러)으로 접근합니다.
+
+`db/schema.sql` 은 다른 Postgres 로 옮길 때를 위한 일반 참고용 테이블 정의입니다.
 
 ---
 
