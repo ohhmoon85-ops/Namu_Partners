@@ -1,0 +1,20 @@
+node_modules/
+.next/
+out/
+build/
+next-env.d.ts
+*.tsbuildinfo
+
+# 로컬 데이터 스토어 (개인정보 포함 — 절대 커밋 금지)
+.data/
+
+# 내부 기획 문서 (공개 저장소에 노출하지 않는다)
+*.pdf
+*.docx
+
+.env
+.env.local
+.env*.local
+
+.DS_Store
+Thumbs.db

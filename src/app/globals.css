@@ -1,0 +1,222 @@
+@import "tailwindcss";
+
+/* ────────────────────────────────────────────────────────────
+   디자인 토큰 — 기획서 5.1 "절제된 고급스러움"
+   딥 네이비(#1F3864) 기조 + 골드/샴페인(#B99A5B) 포인트
+   ──────────────────────────────────────────────────────────── */
+@theme {
+  --color-navy: #1f3864;
+  --color-navy-700: #1a2f55;
+  --color-navy-900: #101d36;
+  --color-navy-500: #2e4e86;
+  --color-navy-300: #6d87b8;
+  --color-navy-50: #f2f5fb;
+
+  --color-gold: #b99a5b;
+  --color-gold-400: #cbb280;
+  --color-gold-200: #e6d9bd;
+  --color-gold-50: #faf6ee;
+
+  --color-ink: #16181d;
+  --color-muted: #6b7280;
+  --color-line: #e5e8f0;
+  --color-mist: #f7f8fb;
+
+  --font-sans: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont,
+    system-ui, "Apple SD Gothic Neo", "Malgun Gothic", "맑은 고딕", sans-serif;
+
+  --shadow-card: 0 1px 2px rgba(16, 29, 54, 0.04), 0 12px 32px -12px rgba(16, 29, 54, 0.14);
+  --shadow-lift: 0 2px 4px rgba(16, 29, 54, 0.06), 0 24px 48px -16px rgba(16, 29, 54, 0.22);
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background: #ffffff;
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    /* 숫자 폭을 고정해 대기 인원 카운터가 흔들리지 않게 한다 */
+    font-feature-settings: "tnum";
+    word-break: keep-all; /* 한국어 단어 단위 줄바꿈 */
+    line-height: 1.6;
+  }
+
+  ::selection {
+    background: var(--color-gold-200);
+    color: var(--color-navy-900);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-navy-500);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  /* iOS 에서 폼 입력 시 화면이 확대되지 않도록 최소 16px 유지 */
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+    font-family: inherit;
+  }
+}
+
+@layer components {
+  /* 최소 44px 터치 타깃 — 기획서 5.2 */
+  .btn,
+  .btn-primary,
+  .btn-gold,
+  .btn-ghost {
+    @apply inline-flex min-h-[48px] items-center justify-center gap-2 rounded-xl px-6
+           text-[15px] font-semibold transition-all duration-200 disabled:cursor-not-allowed
+           disabled:opacity-45;
+  }
+  .btn-primary {
+    @apply bg-navy text-white hover:bg-navy-700 active:scale-[0.99];
+    box-shadow: 0 8px 24px -10px rgba(31, 56, 100, 0.65);
+  }
+  .btn-gold {
+    @apply bg-gold text-white hover:bg-[#a9883f] active:scale-[0.99];
+    box-shadow: 0 8px 24px -10px rgba(185, 154, 91, 0.7);
+  }
+  .btn-ghost {
+    @apply border border-line bg-white text-navy hover:border-navy-300 hover:bg-navy-50;
+  }
+
+  .card {
+    @apply rounded-2xl border border-line bg-white p-6;
+    box-shadow: var(--shadow-card);
+  }
+
+  /* 글래스모피즘 카드 — 기획서 5.1 그래픽 방향 */
+  .glass {
+    @apply rounded-2xl border border-white/15 p-6;
+    background: linear-gradient(
+      145deg,
+      rgba(255, 255, 255, 0.14),
+      rgba(255, 255, 255, 0.04)
+    );
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+  }
+
+  .field {
+    @apply w-full rounded-xl border border-line bg-white px-4 py-3.5 text-ink
+           placeholder:text-muted/60 transition-colors
+           focus:border-navy-500 focus:outline-none;
+  }
+  .field-error {
+    @apply border-red-400 focus:border-red-500;
+  }
+
+  .label {
+    @apply mb-2 block text-sm font-semibold text-navy-900;
+  }
+
+  .chip {
+    @apply inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold;
+  }
+
+  /* 섹션 컨테이너 */
+  .container-np {
+    @apply mx-auto w-full max-w-6xl px-5 sm:px-8;
+  }
+
+  .eyebrow {
+    @apply text-xs font-bold uppercase tracking-[0.2em] text-gold;
+  }
+
+  .section-title {
+    @apply text-[26px] font-extrabold leading-tight tracking-tight text-navy-900 sm:text-[34px];
+  }
+}
+
+@layer utilities {
+  /* 핵심 수치(17.5% / 3%)용 초대형 웨이트 — 기획서 5.1 타이포그래피 */
+  .stat-figure {
+    @apply font-extrabold leading-none tracking-[-0.04em];
+    font-variant-numeric: tabular-nums;
+  }
+
+  .text-balance {
+    text-wrap: balance;
+  }
+}
+
+/* ────────────────── 스크롤 등장 애니메이션 ────────────────── */
+.reveal {
+  opacity: 0;
+  transform: translateY(18px);
+  transition: opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: opacity, transform;
+}
+.reveal.is-visible {
+  opacity: 1;
+  transform: none;
+}
+
+@keyframes np-pulse-ring {
+  0% {
+    transform: scale(0.9);
+    opacity: 0.7;
+  }
+  70% {
+    transform: scale(1.35);
+    opacity: 0;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+.pulse-ring::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  border: 2px solid var(--color-gold);
+  animation: np-pulse-ring 2s ease-out infinite;
+}
+
+@keyframes np-shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+.shimmer {
+  position: relative;
+  overflow: hidden;
+}
+.shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.35),
+    transparent
+  );
+  animation: np-shimmer 2.2s infinite;
+}
+
+/* 접근성 — 모션 최소화 설정 존중 */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  .reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+  .pulse-ring::after,
+  .shimmer::after {
+    animation: none;
+  }
+}

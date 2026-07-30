@@ -1,0 +1,7 @@
+# 저장소에는 항상 LF 로 보관한다 (Vercel/Linux 빌드 환경과 일치).
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.pdf binary
+*.docx binary
