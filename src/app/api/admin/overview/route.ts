@@ -8,6 +8,8 @@ import {
   listApplications,
   listInquiries,
   listNotifications,
+  listPartners,
+  storeBackend,
 } from "@/lib/store";
 import { APPLICATION_STATUSES, type ApplicationStatus } from "@/lib/types";
 
@@ -19,13 +21,14 @@ export async function GET() {
   const denied = await requireAdmin();
   if (denied) return denied;
 
-  const [settings, summaries, applications, inquiries, notifications] =
+  const [settings, summaries, applications, inquiries, notifications, partners] =
     await Promise.all([
       getSettings(),
       getPartnerSummaries(),
-      listApplications(),
+      listApplications({ limit: 1000 }),
       listInquiries(),
       listNotifications(30),
+      listPartners(),
     ]);
 
   const statusCounts = Object.fromEntries(
@@ -40,7 +43,10 @@ export async function GET() {
 
   return NextResponse.json({
     ok: true,
+    // 운영자가 지금 어떤 저장소로 동작 중인지 화면에서 바로 확인할 수 있게 한다.
+    backend: storeBackend,
     settings,
+    partners: partners.map((p) => ({ code: p.code, name: p.name })),
     statusCounts,
     totals: {
       applications: applications.length,

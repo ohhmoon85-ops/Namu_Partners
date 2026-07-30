@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { number, waitTimeText, won } from "@/lib/format";
-import { PRODUCTS } from "@/lib/catalog";
+import type { Product } from "@/lib/types";
 
 interface Snapshot {
   ticket: string;
@@ -22,7 +22,14 @@ interface Snapshot {
 
 const POLL_INTERVAL_MS = 3000;
 
-export default function WaitingRoom({ initial }: { initial: Snapshot }) {
+export default function WaitingRoom({
+  initial,
+  products,
+}: {
+  initial: Snapshot;
+  /** 대기 중 콘텐츠에 쓰는 상품 목록 — 서버에서 저장소를 읽어 전달한다 */
+  products: Product[];
+}) {
   const [snapshot, setSnapshot] = useState<Snapshot>(initial);
   const [offline, setOffline] = useState(false);
   const [savingOptIn, setSavingOptIn] = useState(false);
@@ -203,7 +210,7 @@ export default function WaitingRoom({ initial }: { initial: Snapshot }) {
       </div>
 
       {/* 대기 중 콘텐츠 — 대기시간을 홍보 접점으로 전환 (기획서 4.3) */}
-      <WaitingContent />
+      <WaitingContent products={products} />
     </div>
   );
 }
@@ -292,8 +299,10 @@ const WAIT_FAQ = [
   },
 ];
 
-function WaitingContent() {
-  const featured = PRODUCTS.filter((p) => p.featured);
+function WaitingContent({ products }: { products: Product[] }) {
+  // 추천 상품이 지정돼 있지 않으면 앞의 두 건을 보여준다.
+  const featured = products.filter((p) => p.featured);
+  const highlights = featured.length > 0 ? featured : products.slice(0, 2);
 
   return (
     <div className="container-np mt-14 max-w-2xl">
@@ -306,7 +315,7 @@ function WaitingContent() {
         <div className="glass">
           <p className="text-[15px] font-bold">이만큼 아끼셨습니다</p>
           <ul className="mt-4 space-y-3">
-            {featured.map((product) => {
+            {highlights.map((product) => {
               const saving = product.designerPremium - product.groupPremium;
               return (
                 <li

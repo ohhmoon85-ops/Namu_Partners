@@ -2,7 +2,10 @@ import type { Metadata } from "next";
 import Reveal from "@/components/Reveal";
 import CashbackSimulator from "@/components/partners/CashbackSimulator";
 import PartnerInquiryForm from "@/components/partners/PartnerInquiryForm";
-import { PARTNERS, PRODUCTS } from "@/lib/catalog";
+import { listPartners, listProducts } from "@/lib/store";
+
+// 협약단체 목록과 상품 요율을 저장소에서 읽으므로 요청 시 렌더링한다.
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "협약단체 안내",
@@ -43,10 +46,13 @@ const PROCESS = [
   },
 ];
 
-export default function PartnersPage() {
-  const averagePremium = Math.round(
-    PRODUCTS.reduce((sum, p) => sum + p.groupPremium, 0) / PRODUCTS.length
-  );
+export default async function PartnersPage() {
+  const [partners, products] = await Promise.all([listPartners(), listProducts()]);
+  const averagePremium = products.length
+    ? Math.round(
+        products.reduce((sum, p) => sum + p.groupPremium, 0) / products.length
+      )
+    : 0;
 
   return (
     <>
@@ -260,11 +266,11 @@ export default function PartnersPage() {
         <div className="container-np">
           <Reveal>
             <h2 className="text-center text-[15px] font-bold text-navy-900">
-              현재 {PARTNERS.filter((p) => p.active).length}개 단체가 함께하고 있습니다
+              현재 {partners.length}개 단체가 함께하고 있습니다
             </h2>
           </Reveal>
           <ul className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-            {PARTNERS.filter((p) => p.active).map((partner, i) => (
+            {partners.map((partner, i) => (
               <Reveal key={partner.code} delay={i * 60} as="li">
                 <div className="flex h-full flex-col items-center justify-center rounded-xl border border-line bg-white px-4 py-6 text-center">
                   <p className="text-[13px] font-bold leading-snug text-navy-900">

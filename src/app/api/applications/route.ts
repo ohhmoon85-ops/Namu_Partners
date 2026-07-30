@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
-import { getPartner, getProduct } from "@/lib/catalog";
 import { encrypt, hashValue } from "@/lib/crypto";
 import { clientIp, rateLimit } from "@/lib/ratelimit";
 import {
+  DuplicateApplicationError,
   IntakePausedError,
+  InvalidCatalogError,
   createApplication,
-  findActiveDuplicate,
+  getPartner,
+  getProduct,
 } from "@/lib/store";
 import {
   collectErrors,
@@ -61,7 +63,8 @@ export async function POST(request: Request) {
     );
   }
 
-  const partner = getPartner(partnerCode);
+  // 저장소가 최종 검증을 하지만, 사용자에게 빠르고 구체적인 오류를 주기 위해 먼저 확인한다.
+  const partner = await getPartner(partnerCode);
   if (!partner) {
     return NextResponse.json(
       { ok: false, error: "유효하지 않은 협약단체입니다." },
@@ -69,7 +72,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const product = getProduct(productId);
+  const product = await getProduct(productId);
   if (!product) {
     return NextResponse.json(
       { ok: false, error: "유효하지 않은 상품입니다." },
@@ -91,33 +94,18 @@ export async function POST(request: Request) {
   }
 
   const phoneDigits = digitsOnly(phone);
-  const phoneHash = hashValue(phoneDigits);
-
-  const duplicate = await findActiveDuplicate(phoneHash, product.id);
-  if (duplicate) {
-    return NextResponse.json(
-      {
-        ok: false,
-        error: `이미 진행 중인 신청이 있습니다. (접수번호 ${duplicate.ticket})`,
-        ticket: duplicate.ticket,
-      },
-      { status: 409 }
-    );
-  }
 
   try {
+    // 중복 접수 차단은 저장소가 원자적으로 처리한다.
+    // (사전 조회 후 삽입하면 동시 요청에서 경합이 발생한다)
     const application = await createApplication({
       partnerCode: partner.code,
-      partnerName: partner.name,
       productId: product.id,
-      productName: product.name,
-      designerPremium: product.designerPremium,
-      groupPremium: product.groupPremium,
       // 개인정보는 암호화하여 저장한다. (기획서 6장 보안)
       nameEnc: encrypt(name),
       phoneEnc: encrypt(phoneDigits),
       birthEnc: encrypt(normalizeBirth(birth)),
-      phoneHash,
+      phoneHash: hashValue(phoneDigits),
       gender,
       notifyOptIn: body.notifyOptIn === true,
       marketingOptIn: body.marketingOptIn === true,
@@ -135,6 +123,15 @@ export async function POST(request: Request) {
   } catch (error) {
     if (error instanceof IntakePausedError) {
       return NextResponse.json({ ok: false, error: error.message }, { status: 503 });
+    }
+    if (error instanceof DuplicateApplicationError) {
+      return NextResponse.json(
+        { ok: false, error: error.message, ticket: error.ticket },
+        { status: 409 }
+      );
+    }
+    if (error instanceof InvalidCatalogError) {
+      return NextResponse.json({ ok: false, error: error.message }, { status: 400 });
     }
     console.error("[api/applications] 접수 실패", error);
     return NextResponse.json(

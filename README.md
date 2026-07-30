@@ -137,13 +137,23 @@ npm run start
 
 ### 저장소 구성
 
-현재 데이터는 `.data/store.json`(로컬 JSON 파일)에 저장됩니다. 모든 접근이
-`src/lib/store.ts` 의 함수로 한정되어 있고, 읽기-수정-쓰기를 직렬화해 순번 중복이
-발생하지 않습니다.
+저장소는 `DATABASE_URL` 유무로 자동 전환됩니다. 화면과 API 는 `src/lib/store` 의
+계약(`StoreApi`)에만 의존하므로 상위 코드는 어느 쪽이든 동일합니다.
 
-> ⚠️ **서버리스(Vercel) 다중 인스턴스 배포 전 반드시 교체해야 합니다.**
-> 파일 스토어는 단일 프로세스를 전제로 하며, 인스턴스마다 별도 파일을 갖게 됩니다.
-> 이행 대상 스키마는 아래 Supabase 절을 참고하세요.
+| `DATABASE_URL` | 사용 저장소 | 용도 |
+| --- | --- | --- |
+| 설정됨 | Supabase Postgres `namu` 스키마 (`src/lib/store/pg-store.ts`) | **운영** |
+| 미설정 | 로컬 JSON 파일 `.data/store.json` (`src/lib/store/json-store.ts`) | 개발·데모 |
+
+관리자 화면 상단의 배지(`Supabase` / `로컬 파일`)로 현재 어느 쪽으로 동작 중인지
+바로 확인할 수 있습니다.
+
+> ⚠️ **서버리스(Vercel) 배포 시 `DATABASE_URL` 은 필수입니다.**
+> 파일 스토어는 단일 프로세스를 전제로 하므로, 미설정 상태로 배포하면
+> 인스턴스마다 데이터가 갈라집니다. 프로덕션에서 미설정이면 서버 로그에 경고가 남습니다.
+
+연결은 `pg`(node-postgres)로 Supabase **트랜잭션 풀러(6543)** 에 직접 붙습니다.
+서버 API 라우트에서만 사용하며(`server-only`), 브라우저에는 노출되지 않습니다.
 
 ### Supabase 적용 (`db/supabase/001_init_namu.sql`)
 
@@ -178,8 +188,18 @@ npm run start
 
 **실행 후 반드시 확인:** Settings → API → *Exposed schemas* 에 `namu` 를
 **추가하지 마세요.** 개인정보가 있는 서버 전용 스키마이며, 클라이언트에서
-직접 접근할 수 없어야 합니다. 앱 서버는 서비스 롤 키 또는 직접 커넥션
-(서버리스는 6543 트랜잭션 풀러)으로 접근합니다.
+직접 접근할 수 없어야 합니다.
+
+적용이 끝나면 `.env.local` 에 연결 문자열을 넣고 앱을 재시작하면 Supabase 로 전환됩니다.
+
+```bash
+# Supabase 대시보드 → Connect → Transaction pooler (포트 6543)
+DATABASE_URL=postgresql://postgres.<project-ref>:<password>@aws-0-ap-northeast-2.pooler.supabase.com:6543/postgres
+```
+
+세션 풀러(5432)가 아니라 **트랜잭션 풀러(6543)** 를 써야 합니다. 서버리스는 인스턴스가
+계속 새로 뜨므로 세션 풀러로는 커넥션이 금방 고갈됩니다. 비밀번호에 특수문자가 있으면
+URL 인코딩하세요(`@` → `%40`).
 
 `db/schema.sql` 은 다른 Postgres 로 옮길 때를 위한 일반 참고용 테이블 정의입니다.
 

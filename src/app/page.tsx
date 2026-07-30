@@ -2,28 +2,32 @@ import Link from "next/link";
 import Reveal from "@/components/Reveal";
 import CountUp from "@/components/CountUp";
 import StickyCta from "@/components/StickyCta";
-import { PARTNERS, PRODUCTS, averageSavingRate, savingRate } from "@/lib/catalog";
-import { getPublicStats } from "@/lib/store";
+import { savingRate } from "@/lib/catalog";
+import { getPublicStats, listPartners, listProducts } from "@/lib/store";
 import { COMPANY } from "@/lib/company";
 import { number, percent, won } from "@/lib/format";
+import type { Partner, Product, PublicStats } from "@/lib/types";
 
 // 신뢰 지표 카운터가 실적을 반영해야 하므로 매 요청 시 렌더링한다.
 export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
-  const stats = await getPublicStats();
-  const avgRate = averageSavingRate();
-  const memberTotal = PARTNERS.reduce((sum, p) => sum + p.memberCount, 0);
+  const [stats, partners, products] = await Promise.all([
+    getPublicStats(),
+    listPartners(),
+    listProducts(),
+  ]);
+  const memberTotal = partners.reduce((sum, p) => sum + p.memberCount, 0);
 
   return (
     <>
-      <Hero avgRate={avgRate} />
+      <Hero avgRate={stats.averageSavingRate} />
       <TrustBar stats={stats} memberTotal={memberTotal} />
       <SavingPrinciple />
-      <ProductSection />
+      <ProductSection products={products} />
       <CashbackSection />
       <ProcessSection />
-      <PartnerWall />
+      <PartnerWall partners={partners} />
       <FaqTeaser />
       <FinalCta />
       <StickyCta />
@@ -144,7 +148,7 @@ function TrustBar({
   stats,
   memberTotal,
 }: {
-  stats: Awaited<ReturnType<typeof getPublicStats>>;
+  stats: PublicStats;
   memberTotal: number;
 }) {
   const items = [
@@ -292,7 +296,7 @@ function SavingPrinciple() {
 
 /* ────────────── 상품별 절감액 비교 (기획서 4.2 2단계) ────────────── */
 
-function ProductSection() {
+function ProductSection({ products }: { products: Product[] }) {
   return (
     <section id="products" className="scroll-mt-20 bg-mist py-20 sm:py-28">
       <div className="container-np">
@@ -306,7 +310,7 @@ function ProductSection() {
         </Reveal>
 
         <div className="mt-12 grid gap-5 sm:grid-cols-2">
-          {PRODUCTS.map((product, i) => {
+          {products.map((product, i) => {
             const monthlySaving = product.designerPremium - product.groupPremium;
             return (
               <Reveal key={product.id} delay={i * 80}>
@@ -494,7 +498,7 @@ function ProcessSection() {
 
 /* ───────────────── 협약단체 로고 월 (기획서 5.1) ───────────────── */
 
-function PartnerWall() {
+function PartnerWall({ partners }: { partners: Partner[] }) {
   return (
     <section className="border-y border-line bg-mist py-16">
       <div className="container-np">
@@ -504,7 +508,7 @@ function PartnerWall() {
           </p>
         </Reveal>
         <ul className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-          {PARTNERS.filter((p) => p.active).map((partner, i) => (
+          {partners.map((partner, i) => (
             <Reveal key={partner.code} delay={i * 60} as="li">
               <div className="flex h-full flex-col items-center justify-center rounded-xl border border-line bg-white px-4 py-6 text-center">
                 <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-navy-50 text-[13px] font-extrabold text-navy">

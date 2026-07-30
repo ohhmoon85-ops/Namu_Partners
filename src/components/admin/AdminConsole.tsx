@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { PARTNERS } from "@/lib/catalog";
 import { formatDateTime, number, won } from "@/lib/format";
 import {
   APPLICATION_STATUSES,
@@ -49,7 +48,10 @@ interface Inquiry {
 }
 
 interface Overview {
+  /** 현재 동작 중인 저장소 — json 이면 로컬 파일(개발용) */
+  backend: "postgres" | "json";
   settings: Settings;
+  partners: { code: string; name: string }[];
   statusCounts: Record<ApplicationStatus, number>;
   totals: {
     applications: number;
@@ -142,6 +144,22 @@ export default function AdminConsole() {
             <span className="hidden text-[12px] text-muted sm:block">
               접수 · 대기열 · 캐시백 운영
             </span>
+            {overview && (
+              <span
+                className={`chip ${
+                  overview.backend === "postgres"
+                    ? "bg-emerald-50 text-emerald-700"
+                    : "bg-amber-50 text-amber-700"
+                }`}
+                title={
+                  overview.backend === "postgres"
+                    ? "Supabase(namu 스키마)에 연결되어 있습니다."
+                    : "DATABASE_URL 미설정 — 로컬 파일 저장소로 동작 중입니다."
+                }
+              >
+                {overview.backend === "postgres" ? "Supabase" : "로컬 파일"}
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -198,6 +216,7 @@ export default function AdminConsole() {
             <>
               {tab === "applications" && (
                 <ApplicationsTab
+                  partners={overview?.partners ?? []}
                   applications={applications}
                   statusFilter={statusFilter}
                   setStatusFilter={setStatusFilter}
@@ -257,6 +276,7 @@ function SummaryCards({ overview }: { overview: Overview }) {
 /* ───────────────────────── 접수 관리 탭 ───────────────────────── */
 
 function ApplicationsTab({
+  partners,
   applications,
   statusFilter,
   setStatusFilter,
@@ -266,6 +286,7 @@ function ApplicationsTab({
   setQuery,
   onChanged,
 }: {
+  partners: { code: string; name: string }[];
   applications: AdminApplication[];
   statusFilter: ApplicationStatus | "all";
   setStatusFilter: (v: ApplicationStatus | "all") => void;
@@ -301,7 +322,7 @@ function ApplicationsTab({
           className="field sm:max-w-[220px]"
         >
           <option value="all">전체 단체</option>
-          {PARTNERS.map((p) => (
+          {partners.map((p) => (
             <option key={p.code} value={p.code}>
               {p.name}
             </option>
