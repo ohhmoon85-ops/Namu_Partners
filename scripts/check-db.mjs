@@ -84,16 +84,43 @@ try {
 } catch (error) {
   const message = String(error?.message ?? error);
   console.log("");
+
+  // 풀러는 DNS 는 정상이어도 "이 프로젝트를 모른다"고 답할 수 있다.
+  // 메시지에 ENOTFOUND 가 섞여 나오므로 DNS 오류보다 먼저 판정해야 한다.
+  if (/tenant|Tenant or user not found/i.test(message)) {
+    const host = parsed.hostname;
+    const flipped = host.startsWith("aws-0")
+      ? host.replace("aws-0", "aws-1")
+      : host.replace("aws-1", "aws-0");
+    fail(
+      "풀러가 이 프로젝트를 찾지 못했습니다. 호스트 주소가 틀렸습니다.",
+      `서버 응답: ${message}`,
+      "",
+      "주소는 살아 있지만 이 프로젝트를 담당하는 풀러가 아닙니다.",
+      "aws-0 / aws-1 처럼 앞 번호가 프로젝트마다 다릅니다.",
+      "",
+      ".env.local 의 호스트를 아래로 바꿔서 다시 시도해 보세요:",
+      `  ${flipped}`,
+      "",
+      "그래도 안 되면 대시보드 → Connect → Connection string 의 값을 그대로 쓰세요."
+    );
+  }
+
   if (/password authentication failed|SASL|SCRAM/i.test(message)) {
     fail(
       "비밀번호가 틀렸습니다.",
       `서버 응답: ${message}`,
       "",
-      "Supabase 대시보드에서 비밀번호를 재설정한 뒤 다시 넣어 보세요:",
-      "Settings → Database → Database password → Reset database password",
+      "여기서 재설정하세요 (주소창에 그대로 붙여넣기):",
+      `https://supabase.com/dashboard/project/${
+        decodeURIComponent(parsed.username).split(".")[1] ?? "<project-ref>"
+      }/settings/database`,
       "",
-      "비밀번호에 특수문자가 있다면 그것이 원인일 수 있습니다.",
-      "특수문자 없는 비밀번호로 만드는 것을 권장합니다."
+      "→ Database password → Reset database password",
+      "→ 새 비밀번호를 만든 뒤 .env.local 의 : 와 @ 사이 부분만 교체",
+      "",
+      "주의: Supabase 로그인 계정 비밀번호가 아니라",
+      "      데이터베이스 전용 비밀번호입니다. 서로 다릅니다."
     );
   }
   if (/ENOTFOUND|EAI_AGAIN|getaddrinfo/i.test(message)) {
