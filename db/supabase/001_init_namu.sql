@@ -807,9 +807,23 @@ on conflict (version) do nothing;
 -- ────────────────────────────────────────────────────────────────────
 
 select
-  '스키마 격리 확인'                                        as check_item,
+  '스키마 객체'                                              as check_item,
+  -- information_schema.tables 는 뷰도 포함하므로 BASE TABLE 만 따로 센다.
   (select count(*) from information_schema.tables
-    where table_schema = 'namu')::text || '개 테이블 생성'  as result
+    where table_schema = 'namu' and table_type = 'BASE TABLE')::text || '개 테이블 + '
+  || (select count(*) from information_schema.views
+       where table_schema = 'namu')::text || '개 뷰'          as result
+union all
+select '대기열 함수',
+       (select count(*)::text from pg_proc p
+          join pg_namespace n on n.oid = p.pronamespace
+         where n.nspname = 'namu') || '개'
+union all
+select 'RLS 미적용 테이블',
+       coalesce((select string_agg(c.relname, ', ')
+                   from pg_class c join pg_namespace n on n.oid = c.relnamespace
+                  where n.nspname = 'namu' and c.relkind = 'r' and not c.relrowsecurity),
+                '없음 (전체 적용됨)')
 union all
 select '협약단체', (select count(*)::text from namu.partners) || '개'
 union all
